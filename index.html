@@ -123,13 +123,11 @@
           <div class="thought-meta-row">
             <label class="field compact-field">
               <span>Kind</span>
-              <select id="kindInput">
-                <option value="idea">Idea</option>
-                <option value="project">Project</option>
-                <option value="person">Person</option>
-                <option value="resource">Resource</option>
-                <option value="question">Question</option>
-              </select>
+              <div class="kind-control">
+                <select id="kindInput"></select>
+                <input id="kindColorInput" type="color" title="Kind colour" aria-label="Kind colour" />
+                <button id="kindDefaultButton" type="button" title="Use this kind by default">Default</button>
+              </div>
             </label>
             <label class="field compact-field">
               <span>Tags</span>
@@ -324,6 +322,18 @@
               <option value="dark-ocean">Dark ocean</option>
             </select>
           </label>
+
+          <section class="settings-section kind-settings">
+            <div class="settings-section-header">
+              <h3>Kinds</h3>
+            </div>
+            <div id="kindList" class="kind-list"></div>
+            <div class="kind-add-row">
+              <input id="newKindNameInput" type="text" maxlength="32" placeholder="New kind" autocomplete="off" />
+              <input id="newKindColorInput" type="color" aria-label="New kind colour" />
+              <button id="addKindButton" type="button">Add</button>
+            </div>
+          </section>
         </div>
       </div>
     </section>

@@ -2,16 +2,33 @@ const DB_NAME = "thoughts-mapper";
 const DB_VERSION = 1;
 const STORE_NAME = "documents";
 const DOC_KEY = "main";
-const APP_DATA_VERSION = 2;
+const APP_DATA_VERSION = 3;
 const HISTORY_LIMIT = 60;
+const NEW_KIND_VALUE = "__new-kind__";
+const DEFAULT_KIND_ID = "thought";
+const LINK_DRAW_DURATION = 260;
 
-const kindStyles = {
-  idea: "#2f8f83",
-  project: "#4c7fb8",
-  person: "#d49436",
-  resource: "#8067b3",
-  question: "#c85f6d",
-};
+const defaultKindDefinitions = [
+  { id: "thought", name: "Thought", color: "#4c7fb8" },
+  { id: "idea", name: "Idea", color: "#2f8f83" },
+  { id: "project", name: "Project", color: "#4c7fb8" },
+  { id: "person", name: "Person", color: "#d49436" },
+  { id: "resource", name: "Resource", color: "#8067b3" },
+  { id: "question", name: "Question", color: "#c85f6d" },
+];
+
+const legacyKindStyles = Object.fromEntries(defaultKindDefinitions.map((kind) => [kind.id, kind.color]));
+
+const kindColourPalette = [
+  "#4c7fb8",
+  "#2f8f83",
+  "#d49436",
+  "#8067b3",
+  "#c85f6d",
+  "#5f8f46",
+  "#4f9ca4",
+  "#b06f43",
+];
 
 const colourSchemes = {
   "light-mint": { theme: "light", background: "pastel-mint" },
@@ -37,6 +54,8 @@ const colourSchemes = {
 };
 
 const seedState = {
+  kinds: defaultKindDefinitions,
+  defaultKindId: DEFAULT_KIND_ID,
   thoughts: [
     {
       id: "t-home",
@@ -245,6 +264,12 @@ let pointerMode = null;
 let pointerStart = null;
 let focusAnimation = null;
 let focusPositions = null;
+let pendingGraphTransition = null;
+const graphEffects = {
+  appearingLinkIds: new Set(),
+  leavingLinks: [],
+  dimThoughts: new Map(),
+};
 let contextAnchorId = null;
 let contextLinkId = null;
 let hoverThoughtId = null;
@@ -296,6 +321,10 @@ const els = {
   lineThicknessValue: document.querySelector("#lineThicknessValue"),
   connectionTypeInput: document.querySelector("#connectionTypeInput"),
   lineEndpointInput: document.querySelector("#lineEndpointInput"),
+  kindList: document.querySelector("#kindList"),
+  newKindNameInput: document.querySelector("#newKindNameInput"),
+  newKindColorInput: document.querySelector("#newKindColorInput"),
+  addKindButton: document.querySelector("#addKindButton"),
   graph: document.querySelector("#graph"),
   graphBackground: document.querySelector("#graphBackground"),
   viewport: document.querySelector("#viewport"),
@@ -307,6 +336,8 @@ const els = {
   deleteButton: document.querySelector("#deleteButton"),
   titleInput: document.querySelector("#titleInput"),
   kindInput: document.querySelector("#kindInput"),
+  kindColorInput: document.querySelector("#kindColorInput"),
+  kindDefaultButton: document.querySelector("#kindDefaultButton"),
   tagInput: document.querySelector("#tagInput"),
   inboxPlacementPanel: document.querySelector("#inboxPlacementPanel"),
   placeTargetInput: document.querySelector("#placeTargetInput"),
@@ -495,11 +526,50 @@ function syncActiveProject() {
   project.updatedAt = new Date().toISOString();
 }
 
+function sanitizeKindDefinitions(kinds, thoughts = []) {
+  const byId = new Map();
+  const sourceKinds = Array.isArray(kinds) && kinds.length ? kinds : defaultKindDefinitions;
+  sourceKinds.forEach((kind, index) => {
+    const name = normalizeKindName(kind?.name || kind?.id || `Kind ${index + 1}`);
+    const id = sanitizeKindId(kind?.id || name);
+    if (!id) return;
+    if (byId.has(id)) {
+      const existing = byId.get(id);
+      byId.set(id, {
+        ...existing,
+        name,
+        color: sanitizeKindColor(kind?.color, existing.color),
+      });
+      return;
+    }
+    byId.set(id, {
+      id,
+      name,
+      color: sanitizeKindColor(kind?.color, kindColourPalette[index % kindColourPalette.length]),
+    });
+  });
+  thoughts.forEach((thought) => {
+    const id = sanitizeKindId(thought?.kind);
+    if (!id || byId.has(id)) return;
+    byId.set(id, {
+      id,
+      name: normalizeKindName(id),
+      color: sanitizeKindColor(legacyKindStyles[id], kindColourPalette[byId.size % kindColourPalette.length]),
+    });
+  });
+  if (!byId.size) byId.set(DEFAULT_KIND_ID, { ...defaultKindDefinitions[0] });
+  return [...byId.values()].slice(0, 32);
+}
+
 function sanitizeState(nextState) {
   const clean = clone(nextState);
   clean.thoughts = Array.isArray(clean.thoughts) ? clean.thoughts : [];
   clean.links = Array.isArray(clean.links) ? clean.links : [];
   clean.view = clean.view || { x: 0, y: 0, scale: 1 };
+  clean.kinds = sanitizeKindDefinitions(clean.kinds, clean.thoughts);
+  clean.defaultKindId = clean.kinds.some((kind) => kind.id === clean.defaultKindId)
+    ? clean.defaultKindId
+    : clean.kinds[0]?.id || DEFAULT_KIND_ID;
   clean.settings = {
     theme: ["light", "dark"].includes(clean.settings?.theme) ? clean.settings.theme : "light",
     background: [
@@ -530,7 +600,7 @@ function sanitizeState(nextState) {
   clean.thoughts = clean.thoughts.map((thought, index) => ({
     id: thought.id || makeId("t"),
     title: String(thought.title || "Untitled").slice(0, 80),
-    kind: kindStyles[thought.kind] ? thought.kind : "idea",
+    kind: clean.kinds.some((kind) => kind.id === thought.kind) ? thought.kind : clean.defaultKindId,
     note: String(thought.note || ""),
     tags: normalizeTags(thought.tags),
     x: Number.isFinite(thought.x) ? thought.x : index * 120,
@@ -643,10 +713,40 @@ function bindEvents() {
   els.kindInput.addEventListener("change", () => {
     const selected = getSelectedThought();
     if (!selected) return;
+    if (els.kindInput.value === NEW_KIND_VALUE) {
+      createKindFromPrompt({ assignToThoughtId: selected.id });
+      return;
+    }
     pushHistory();
     selected.kind = els.kindInput.value;
     render();
     persistState();
+  });
+
+  els.kindColorInput.addEventListener("change", () => {
+    const selected = getSelectedThought();
+    const kind = selected ? getKindDefinition(selected.kind) : null;
+    if (!kind) return;
+    pushHistory();
+    kind.color = sanitizeKindColor(els.kindColorInput.value, kind.color);
+    render();
+    persistState();
+  });
+
+  els.kindDefaultButton.addEventListener("click", () => {
+    const selected = getSelectedThought();
+    if (!selected || state.defaultKindId === selected.kind) return;
+    pushHistory();
+    state.defaultKindId = selected.kind;
+    render();
+    persistState();
+  });
+
+  els.addKindButton.addEventListener("click", addKindFromSettings);
+  els.newKindNameInput.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addKindFromSettings();
   });
 
   els.tagInput.addEventListener("change", () => {
@@ -772,6 +872,7 @@ function render() {
   renderHistoryControls();
   renderThoughtList();
   renderDetails();
+  renderKindSettings();
   renderInboxReview();
   renderGraph();
 }
@@ -923,6 +1024,8 @@ function createTemplateState(template) {
   }
 
   return sanitizeState({
+    kinds: clone(state?.kinds || seedState.kinds),
+    defaultKindId: state?.defaultKindId || DEFAULT_KIND_ID,
     thoughts,
     links,
     selectedId: rootId,
@@ -946,7 +1049,7 @@ function renderThoughtList() {
   els.inboxFilterButton.classList.toggle("active", showInboxOnly);
   const thoughts = state.thoughts
     .filter((thought) => {
-      const haystack = `${thought.title} ${thought.kind} ${thought.note} ${thought.tags.join(" ")}`.toLowerCase();
+      const haystack = `${thought.title} ${getKindName(thought.kind)} ${thought.note} ${thought.tags.join(" ")}`.toLowerCase();
       const matchesQuery = haystack.includes(query);
       const matchesTag = !tagFilter || thought.tags.includes(tagFilter);
       const matchesInbox = !showInboxOnly || isInboxThought(thought.id);
@@ -964,7 +1067,7 @@ function renderThoughtList() {
 
       const dot = document.createElement("span");
       dot.className = "thought-dot";
-      dot.style.background = kindStyles[thought.kind];
+      dot.style.background = getKindColor(thought.kind);
 
       const text = document.createElement("span");
       const name = document.createElement("span");
@@ -972,7 +1075,7 @@ function renderThoughtList() {
       name.textContent = thought.title;
       const kind = document.createElement("span");
       kind.className = "thought-kind";
-      kind.textContent = [thought.kind, isInboxThought(thought.id) ? "inbox" : "", thought.tags[0] ? `#${thought.tags[0]}` : ""]
+      kind.textContent = [getKindName(thought.kind), isInboxThought(thought.id) ? "inbox" : "", thought.tags[0] ? `#${thought.tags[0]}` : ""]
         .filter(Boolean)
         .join(" · ");
       text.append(name, kind);
@@ -988,9 +1091,12 @@ function renderDetails() {
   els.detailsPanel.hidden = !selected;
   if (!selected) return;
 
-  els.selectedType.textContent = selected.kind;
+  const selectedKind = getKindDefinition(selected.kind);
+  els.selectedType.textContent = getKindName(selected.kind);
+  els.selectedType.style.background = colorWithAlpha(selectedKind.color, 0.14);
+  els.selectedType.style.color = selectedKind.color;
   els.titleInput.value = selected.title;
-  els.kindInput.value = selected.kind;
+  renderKindInspector(selected);
   els.tagInput.value = selected.tags.join(", ");
   if (document.activeElement !== els.noteInput) {
     els.noteInput.value = selected.note;
@@ -1033,7 +1139,7 @@ function renderDetails() {
 
       const dot = document.createElement("span");
       dot.className = "thought-dot";
-      dot.style.background = kindStyles[thought.kind];
+      dot.style.background = getKindColor(thought.kind);
       const name = document.createElement("span");
       name.className = "thought-name";
       name.textContent = thought.title;
@@ -1056,6 +1162,77 @@ function renderDetails() {
   renderMentionPanels(selected);
 }
 
+function renderKindInspector(selected) {
+  const options = state.kinds.map((kind) => optionElement(kind.id, kind.name));
+  const divider = optionElement("", "──────────");
+  divider.disabled = true;
+  els.kindInput.replaceChildren(...options, divider, optionElement(NEW_KIND_VALUE, "+ New kind"));
+  els.kindInput.value = selected.kind;
+  const kind = getKindDefinition(selected.kind);
+  els.kindColorInput.value = kind.color;
+  const isDefault = state.defaultKindId === selected.kind;
+  els.kindDefaultButton.classList.toggle("active", isDefault);
+  els.kindDefaultButton.disabled = isDefault;
+  els.kindDefaultButton.textContent = isDefault ? "Default" : "Set default";
+}
+
+function renderKindSettings() {
+  els.newKindColorInput.value = getNextKindColor();
+  els.kindList.replaceChildren(
+    ...state.kinds.map((kind, index) => {
+      const row = document.createElement("div");
+      row.className = "kind-row";
+
+      const defaultInput = document.createElement("input");
+      defaultInput.type = "radio";
+      defaultInput.name = "defaultKind";
+      defaultInput.checked = kind.id === state.defaultKindId;
+      defaultInput.title = `Use ${kind.name} by default`;
+      defaultInput.setAttribute("aria-label", `Use ${kind.name} by default`);
+      defaultInput.addEventListener("change", () => setDefaultKind(kind.id));
+
+      const colorInput = document.createElement("input");
+      colorInput.type = "color";
+      colorInput.value = kind.color;
+      colorInput.title = `${kind.name} colour`;
+      colorInput.setAttribute("aria-label", `${kind.name} colour`);
+      colorInput.addEventListener("change", () => updateKindColor(kind.id, colorInput.value));
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.maxLength = 32;
+      nameInput.value = kind.name;
+      nameInput.setAttribute("aria-label", "Kind name");
+      nameInput.addEventListener("change", () => renameKind(kind.id, nameInput.value));
+
+      const upButton = document.createElement("button");
+      upButton.type = "button";
+      upButton.textContent = "Up";
+      upButton.title = `Move ${kind.name} up`;
+      upButton.disabled = index === 0;
+      upButton.addEventListener("click", () => moveKind(kind.id, -1));
+
+      const downButton = document.createElement("button");
+      downButton.type = "button";
+      downButton.textContent = "Down";
+      downButton.title = `Move ${kind.name} down`;
+      downButton.disabled = index === state.kinds.length - 1;
+      downButton.addEventListener("click", () => moveKind(kind.id, 1));
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "kind-delete-button";
+      deleteButton.textContent = "Delete";
+      deleteButton.title = `Delete ${kind.name}`;
+      deleteButton.disabled = state.kinds.length <= 1;
+      deleteButton.addEventListener("click", () => deleteKind(kind.id));
+
+      row.append(defaultInput, colorInput, nameInput, upButton, downButton, deleteButton);
+      return row;
+    }),
+  );
+}
+
 function renderGraph() {
   els.viewport.setAttribute(
     "transform",
@@ -1067,8 +1244,20 @@ function renderGraph() {
   const activeIds = new Set(getFocusFamilyIds(graphFocusId));
   const previewId = hoverThoughtId && hoverThoughtId !== graphFocusId ? hoverThoughtId : null;
   const previewIds = new Set(getPreviewFamilyIds(previewId));
-  const linkElements = state.links
-    .map((link) => {
+  const linkRenderItems = [
+    ...state.links.map((link) => ({
+      link,
+      effect: graphEffects.appearingLinkIds.has(link.id) ? "appearing" : "",
+      visualId: link.id,
+    })),
+    ...graphEffects.leavingLinks.map((effect) => ({
+      link: effect.link,
+      effect: "leaving",
+      visualId: effect.id,
+    })),
+  ];
+  const linkElements = linkRenderItems
+    .map(({ link, effect, visualId }) => {
       const from = getThought(link.from);
       const to = getThought(link.to);
       if (!from || !to) return null;
@@ -1078,28 +1267,31 @@ function renderGraph() {
       const isSelectedLink = link.id === selectedLinkId;
       const isFocusLink = activeIds.has(link.from) && activeIds.has(link.to);
       const isPreviewLink = previewId && previewIds.has(link.from) && previewIds.has(link.to);
+      const isAppearing = effect === "appearing";
+      const isLeaving = effect === "leaving";
       const fromNodeBox = getNodeBox(link.from);
       const toNodeBox = getNodeBox(link.to);
       const endpoints = getTrimmedLinkEndpoints(fromPos, toPos, fromNodeBox, toNodeBox);
       const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink || isSelectedLink ? 0.8 : 0);
       const group = svg("g", {
-        class: `link-group${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${
+        class: `link-group${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${isLeaving ? " leaving" : ""}${
           isFocusLink && !isActiveLink ? " context" : ""
         }${
-          state.selectedId && !isFocusLink && !isSelectedLink ? " dimmed" : ""
+          state.selectedId && !isFocusLink && !isSelectedLink && !isLeaving ? " dimmed" : ""
         }`,
-        "data-link-id": link.id,
+        "data-link-id": visualId,
       });
       group.append(svg("title", {}, `${from.title} ${getLinkDirectionText(link)} ${to.title}`));
       const linkAttrs = {
-        class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${
+        class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${
           isFocusLink && !isActiveLink ? " context" : ""
         }`,
         style: `stroke-width: ${thickness}px`,
       };
+      if (isAppearing) linkAttrs.pathLength = 1;
       const hitAttrs = {
         class: "link-hit",
-        "data-link-id": link.id,
+        "data-link-id": visualId,
       };
       const linkElement =
         state.settings.connectionType === "curve"
@@ -1130,7 +1322,7 @@ function renderGraph() {
       group.append(hitElement);
       group.append(linkElement);
 
-      if (isActiveLink || isSelectedLink || link.name) {
+      if (!isLeaving && (isActiveLink || isSelectedLink || link.name)) {
         const label = svg(
           "text",
           {
@@ -1142,7 +1334,7 @@ function renderGraph() {
         );
         group.append(label);
       }
-      const priority = isSelectedLink ? 4 : isActiveLink ? 3 : isPreviewLink ? 2 : isFocusLink ? 1 : 0;
+      const priority = isLeaving ? 1 : isSelectedLink ? 5 : isAppearing ? 4 : isActiveLink ? 3 : isPreviewLink ? 2 : isFocusLink ? 1 : 0;
       return { element: group, priority };
     })
     .filter(Boolean)
@@ -1150,27 +1342,30 @@ function renderGraph() {
     .map((item) => item.element);
   els.linksLayer.replaceChildren(...linkElements);
 
-  const nodeElements = getGraphThoughts()
+  const nodeElements = getGraphRenderThoughts()
     .map((thought) => {
-      const position = positions.get(thought.id) || thought;
+      const thoughtEffect = graphEffects.dimThoughts.get(thought.id);
+      const position = thoughtEffect?.position || positions.get(thought.id) || thought;
       const isActive = thought.id === graphFocusId;
       const isConnected = activeIds.has(thought.id) && !isActive;
       const isDimmed = graphFocusId && !activeIds.has(thought.id);
       const isPreview = thought.id === previewId;
       const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
+      const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id);
       const box = getNodeBox(thought.id);
       const scale = box.scale;
       const nodeWidth = box.baseWidth;
       const nodeHeight = box.baseHeight;
+      const showKindLabel = isActive || isConnected || isPreview || isPreviewRelated || state.view.scale >= 1.2;
       const group = svg("g", {
-        class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${
+        class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${
           isPreview ? " preview" : ""
         }${isPreviewRelated ? " preview-related" : ""}`,
         transform: `translate(${position.x} ${position.y}) scale(${scale})`,
         "data-id": thought.id,
-        opacity: isDimmed && !isPreview && !isPreviewRelated ? 0.36 : 1,
+        opacity: isSoftDisconnected ? 0.3 : isDimmed && !isPreview && !isPreviewRelated ? 0.36 : 1,
       });
-      group.append(svg("title", {}, `${thought.title} · ${isInboxThought(thought.id) ? "Inbox" : thought.kind}`));
+      group.append(svg("title", {}, `${thought.title} · ${isInboxThought(thought.id) ? "Inbox" : getKindName(thought.kind)}`));
 
       if (isActive) {
         group.append(
@@ -1190,11 +1385,14 @@ function renderGraph() {
           ry: 18,
         }),
       );
-      group.append(svg("circle", { r: 7, cx: -nodeWidth / 2 + 19, cy: -nodeHeight / 2 + 18, fill: kindStyles[thought.kind] }));
-      group.append(
-        svg("text", { class: "node-title", y: -2 }, trimLabel(thought.title, isActive ? 18 : 13)),
-        svg("text", { class: "node-kind", y: 19 }, isInboxThought(thought.id) ? "inbox" : thought.kind),
-      );
+      group.append(svg("circle", { r: 7, cx: -nodeWidth / 2 + 19, cy: -nodeHeight / 2 + 18, fill: getKindColor(thought.kind) }));
+      const textElements = [
+        svg("text", { class: "node-title", y: showKindLabel ? -2 : 5 }, trimLabel(thought.title, isActive ? 18 : 13)),
+      ];
+      if (showKindLabel) {
+        textElements.push(svg("text", { class: "node-kind", y: 19 }, isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind)));
+      }
+      group.append(...textElements);
       const priority = isActive ? 4 : isPreview ? 3 : isConnected || isPreviewRelated ? 2 : isDimmed ? 0 : 1;
       return { element: group, priority };
     })
@@ -1307,7 +1505,7 @@ function addThought(title, anchorId = state.selectedId, relation = "parent-of", 
   const thought = {
     id: makeId("t"),
     title,
-    kind: "idea",
+    kind: getDefaultKindId(),
     note: "",
     tags: [],
     x: selected ? selected.x + Math.cos(angle) * 150 : (inboxIndex % 4) * 170 - 255,
@@ -1349,20 +1547,24 @@ function addLink(activeId, targetId, relation = "parent-of") {
   const reverse = isRelated ? null : state.links.find((link) => link.type !== "related" && link.from === to && link.to === from);
   if (existing) return;
   pushHistory();
+  let changedLink;
   if (reverse) {
     reverse.from = from;
     reverse.to = to;
     reverse.type = isRelated ? "related" : "parent";
+    changedLink = reverse;
   } else {
-    state.links.push({ id: makeId("l"), from, to, type: isRelated ? "related" : "parent" });
+    changedLink = { id: makeId("l"), from, to, type: isRelated ? "related" : "parent" };
+    state.links.push(changedLink);
   }
   renderThoughtList();
   renderDetails();
   const toPositions = computeFocusPositions(state.selectedId);
-  animateFocus({
+  runGraphTransition({
     fromPositions,
     toPositions,
     toView: getFocusView(state.selectedId, toPositions),
+    appearingLinkIds: [changedLink.id],
     save: true,
   });
 }
@@ -1370,13 +1572,26 @@ function addLink(activeId, targetId, relation = "parent-of") {
 function removeConnection(linkId) {
   const link = state.links.find((item) => item.id === linkId);
   if (!link) return;
+  const fromPositions = getVisualPositions();
+  const leavingLink = clone(link);
+  const disconnectedId = link.from === state.selectedId ? link.to : link.from;
   pushHistory();
   state.links = state.links.filter((item) => item.id !== linkId);
   if (selectedLinkId === linkId) selectedLinkId = null;
   if (contextLinkId === linkId) contextLinkId = null;
-  focusPositions = null;
-  render();
-  persistState();
+  renderThoughtList();
+  renderDetails();
+  const toPositions = computeFocusPositions(state.selectedId);
+  const dimThoughtIds = [disconnectedId];
+  if (state.selectedId && isInboxThought(state.selectedId)) dimThoughtIds.push(state.selectedId);
+  runGraphTransition({
+    fromPositions,
+    toPositions,
+    toView: getFocusView(state.selectedId, toPositions),
+    leavingLinks: [leavingLink],
+    dimThoughtIds,
+    save: true,
+  });
 }
 
 function deleteSelectedThought() {
@@ -1396,6 +1611,7 @@ function deleteSelectedThought() {
 }
 
 function selectThought(id, options = {}) {
+  clearPendingGraphTransition();
   selectedLinkId = null;
   if (id && isInboxThought(id)) {
     state.selectedId = id;
@@ -1486,11 +1702,67 @@ function getFocusView(id, positions = computeFocusPositions(id)) {
   };
 }
 
+function runGraphTransition({
+  fromPositions,
+  toPositions,
+  toView,
+  appearingLinkIds = [],
+  leavingLinks = [],
+  dimThoughtIds = [],
+  delay = LINK_DRAW_DURATION,
+  save = true,
+}) {
+  clearPendingGraphTransition();
+  stopFocusAnimation();
+  graphEffects.appearingLinkIds = new Set(appearingLinkIds);
+  graphEffects.leavingLinks = leavingLinks.map((link) => ({
+    id: makeId("fx"),
+    link: clone(link),
+  }));
+  graphEffects.dimThoughts = new Map();
+  dimThoughtIds.forEach((id) => {
+    const thought = getThought(id);
+    if (!thought) return;
+    const position = fromPositions.get(id) || thought;
+    graphEffects.dimThoughts.set(id, {
+      thought: clone(thought),
+      position: { x: position.x, y: position.y },
+    });
+  });
+  focusPositions = fromPositions;
+  renderGraph();
+  pendingGraphTransition = window.setTimeout(() => {
+    pendingGraphTransition = null;
+    clearGraphEffects();
+    animateFocus({
+      fromPositions,
+      toPositions,
+      toView: toView || state.view,
+      save,
+    });
+  }, delay);
+}
+
+function clearPendingGraphTransition() {
+  if (pendingGraphTransition) {
+    window.clearTimeout(pendingGraphTransition);
+    pendingGraphTransition = null;
+  }
+  clearGraphEffects();
+}
+
+function clearGraphEffects() {
+  graphEffects.appearingLinkIds.clear();
+  graphEffects.leavingLinks = [];
+  graphEffects.dimThoughts.clear();
+}
+
 function animateFocus({ fromPositions, toPositions, toView, save = true }) {
   animateCamera({ fromPositions, toPositions, toView, save });
 }
 
 function animateCamera({ fromPositions = getVisualPositions(), toPositions = getVisualPositions(), toView, save = true }) {
+  clearPendingGraphTransition();
   stopFocusAnimation();
   const fromView = { ...state.view };
   const start = performance.now();
@@ -1850,6 +2122,14 @@ function getGraphThoughts() {
   return state.thoughts.filter((thought) => !isInboxThought(thought.id));
 }
 
+function getGraphRenderThoughts() {
+  const byId = new Map(getGraphThoughts().map((thought) => [thought.id, thought]));
+  graphEffects.dimThoughts.forEach((effect, id) => {
+    if (!byId.has(id)) byId.set(id, effect.thought);
+  });
+  return [...byId.values()];
+}
+
 function getGraphFocusId() {
   return state.selectedId && !isInboxThought(state.selectedId) ? state.selectedId : null;
 }
@@ -1862,8 +2142,183 @@ function isInboxThought(id) {
   return !state.links.some((link) => link.from === id || link.to === id);
 }
 
+function getKindDefinition(id) {
+  return state.kinds.find((kind) => kind.id === id) || state.kinds[0] || defaultKindDefinitions[0];
+}
+
+function getKindName(id) {
+  return getKindDefinition(id).name;
+}
+
+function getKindColor(id) {
+  return getKindDefinition(id).color;
+}
+
+function getDefaultKindId() {
+  return state.kinds.some((kind) => kind.id === state.defaultKindId) ? state.defaultKindId : state.kinds[0]?.id || DEFAULT_KIND_ID;
+}
+
+function createKindFromPrompt(options = {}) {
+  const name = window.prompt("New kind name", "Thought");
+  if (!name) {
+    const selected = getSelectedThought();
+    if (selected) renderKindInspector(selected);
+    return null;
+  }
+  const kindCount = state.kinds.length;
+  const kind = addKind(name, els.kindColorInput?.value || getNextKindColor(), { select: false });
+  if (!kind) return null;
+  if (options.assignToThoughtId) {
+    const thought = getThought(options.assignToThoughtId);
+    if (thought && thought.kind !== kind.id) {
+      if (state.kinds.length === kindCount) pushHistory();
+      thought.kind = kind.id;
+    }
+  }
+  render();
+  persistState();
+  return kind;
+}
+
+function addKindFromSettings() {
+  const kind = addKind(els.newKindNameInput.value, els.newKindColorInput.value);
+  if (!kind) return;
+  els.newKindNameInput.value = "";
+  render();
+  persistState();
+}
+
+function addKind(name, color, options = {}) {
+  const normalizedName = normalizeKindName(name);
+  if (!normalizedName) return null;
+  const existing = state.kinds.find((kind) => kind.name.toLowerCase() === normalizedName.toLowerCase());
+  if (existing) return existing;
+  pushHistory();
+  const kind = {
+    id: getUniqueKindId(normalizedName),
+    name: normalizedName,
+    color: sanitizeKindColor(color, getNextKindColor()),
+  };
+  state.kinds.push(kind);
+  if (options.makeDefault) state.defaultKindId = kind.id;
+  return kind;
+}
+
+function renameKind(id, name) {
+  const kind = getKindDefinition(id);
+  const normalizedName = normalizeKindName(name);
+  if (!kind || !normalizedName || kind.name === normalizedName) {
+    renderKindSettings();
+    return;
+  }
+  if (state.kinds.some((item) => item.id !== id && item.name.toLowerCase() === normalizedName.toLowerCase())) {
+    window.alert("That kind already exists.");
+    renderKindSettings();
+    return;
+  }
+  pushHistory();
+  kind.name = normalizedName;
+  render();
+  persistState();
+}
+
+function updateKindColor(id, color) {
+  const kind = getKindDefinition(id);
+  const nextColor = sanitizeKindColor(color, kind?.color);
+  if (!kind || kind.color === nextColor) return;
+  pushHistory();
+  kind.color = nextColor;
+  render();
+  persistState();
+}
+
+function setDefaultKind(id) {
+  if (!state.kinds.some((kind) => kind.id === id) || state.defaultKindId === id) return;
+  pushHistory();
+  state.defaultKindId = id;
+  render();
+  persistState();
+}
+
+function moveKind(id, direction) {
+  const index = state.kinds.findIndex((kind) => kind.id === id);
+  const nextIndex = index + direction;
+  if (index < 0 || nextIndex < 0 || nextIndex >= state.kinds.length) return;
+  pushHistory();
+  const [kind] = state.kinds.splice(index, 1);
+  state.kinds.splice(nextIndex, 0, kind);
+  render();
+  persistState();
+}
+
+function deleteKind(id) {
+  if (state.kinds.length <= 1) return;
+  const kind = getKindDefinition(id);
+  if (!kind) return;
+  const affectedCount = state.thoughts.filter((thought) => thought.kind === id).length;
+  if (affectedCount) {
+    const approved = window.confirm(`Delete "${kind.name}" and move ${affectedCount} thought${affectedCount === 1 ? "" : "s"} to another kind?`);
+    if (!approved) return;
+  }
+  pushHistory();
+  const fallback = state.kinds.find((item) => item.id !== id && item.id === state.defaultKindId)
+    || state.kinds.find((item) => item.id !== id)
+    || defaultKindDefinitions[0];
+  state.kinds = state.kinds.filter((item) => item.id !== id);
+  state.defaultKindId = state.defaultKindId === id ? fallback.id : state.defaultKindId;
+  state.thoughts.forEach((thought) => {
+    if (thought.kind === id) thought.kind = fallback.id;
+  });
+  render();
+  persistState();
+}
+
 function getAllTags() {
   return [...new Set(state.thoughts.flatMap((thought) => thought.tags || []))].sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeKindName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 32);
+}
+
+function sanitizeKindId(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 36);
+}
+
+function getUniqueKindId(name) {
+  const base = sanitizeKindId(name) || `kind-${state.kinds.length + 1}`;
+  let id = base;
+  let suffix = 2;
+  while (state.kinds.some((kind) => kind.id === id)) {
+    id = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return id;
+}
+
+function sanitizeKindColor(color, fallback = defaultKindDefinitions[0].color) {
+  return /^#[0-9a-f]{6}$/i.test(String(color || "")) ? String(color).toLowerCase() : fallback;
+}
+
+function getNextKindColor() {
+  return kindColourPalette[state.kinds.length % kindColourPalette.length];
+}
+
+function colorWithAlpha(color, alpha) {
+  const safe = sanitizeKindColor(color);
+  const value = Number.parseInt(safe.slice(1), 16);
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function normalizeTags(value) {
@@ -1931,7 +2386,7 @@ function placeInboxReviewThought(relation) {
   selectThought(current.id, { center: false });
   addLink(current.id, targetId, relation);
   inboxReviewIndex = Math.min(inboxReviewIndex, Math.max(getInboxThoughts().length - 1, 0));
-  render();
+  renderInboxReview();
   setStatus("Thought placed");
 }
 
@@ -2008,7 +2463,7 @@ function createThoughtActionItem(thought, label, action, suggestion = false) {
 
   const dot = document.createElement("span");
   dot.className = "thought-dot";
-  dot.style.background = kindStyles[thought.kind];
+  dot.style.background = getKindColor(thought.kind);
   const name = document.createElement("span");
   name.className = "thought-name";
   name.textContent = thought.title;
@@ -2375,6 +2830,8 @@ function retargetContextLink() {
   const keepId = els.linkKeepInput.value;
   const targetId = els.linkRetargetInput.value;
   if (!link || !keepId || !targetId || keepId === targetId) return;
+  const fromPositions = getVisualPositions();
+  const leavingLink = clone(link);
 
   const relation = els.linkRetargetRelationInput.value;
   let nextFrom = keepId;
@@ -2411,9 +2868,17 @@ function retargetContextLink() {
   link.type = nextLink.type;
   link.name = nextLink.name;
   selectedLinkId = link.id;
-  focusPositions = null;
-  render();
-  persistState();
+  renderThoughtList();
+  renderDetails();
+  const toPositions = computeFocusPositions(state.selectedId);
+  runGraphTransition({
+    fromPositions,
+    toPositions,
+    toView: getFocusView(state.selectedId, toPositions),
+    appearingLinkIds: [link.id],
+    leavingLinks: [leavingLink],
+    save: true,
+  });
   closeContextMenu();
 }
 
@@ -2455,7 +2920,7 @@ function exportMarkdown() {
     .forEach((thought) => {
       const connections = getConnections(thought.id);
       lines.push(`## ${thought.title}`, "");
-      lines.push(`- Kind: ${thought.kind}`);
+      lines.push(`- Kind: ${getKindName(thought.kind)}`);
       if (thought.tags.length) lines.push(`- Tags: ${thought.tags.map((tag) => `#${tag}`).join(" ")}`);
       if (connections.length) {
         lines.push("- Links:");

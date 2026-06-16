@@ -225,7 +225,7 @@
     </section>
 
     <div id="contextMenu" class="context-menu" hidden>
-      <form id="nodeCreateForm">
+      <form id="nodeCreateForm" class="context-form">
         <div class="context-title">New connected thought</div>
         <input id="nodeCreateInput" type="text" maxlength="80" placeholder="Thought title" autocomplete="off" />
         <select id="nodeCreateRelationInput" aria-label="Relationship">
@@ -237,6 +237,32 @@
           <button id="nodeCreateCancelButton" type="button">Cancel</button>
           <button type="submit">Create</button>
         </div>
+      </form>
+
+      <form id="linkEditForm" class="context-form" hidden>
+        <div class="context-title">Connection</div>
+        <input id="linkNameInput" type="text" maxlength="80" placeholder="Connection name" autocomplete="off" />
+        <select id="linkDirectionInput" aria-label="Connection relationship">
+          <option value="parent-forward">Keep parent to child</option>
+          <option value="parent-reverse">Reverse parent and child</option>
+          <option value="related">Related</option>
+        </select>
+        <div class="context-actions">
+          <button id="linkUnlinkButton" class="context-danger" type="button">Unlink</button>
+          <button type="submit">Save</button>
+        </div>
+
+        <div class="context-divider"></div>
+        <div class="context-title">Reconnect</div>
+        <select id="linkKeepInput" aria-label="Keep this thought connected"></select>
+        <select id="linkRetargetInput" aria-label="Connect to another thought"></select>
+        <select id="linkRetargetRelationInput" aria-label="Reconnect relationship">
+          <option value="parent-of">Make other thought child</option>
+          <option value="child-of">Make other thought parent</option>
+          <option value="related">Related</option>
+          <option value="sibling">Place as sibling</option>
+        </select>
+        <button id="linkRetargetButton" type="button">Reconnect</button>
       </form>
     </div>
 

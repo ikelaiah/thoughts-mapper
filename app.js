@@ -246,7 +246,9 @@ let pointerStart = null;
 let focusAnimation = null;
 let focusPositions = null;
 let contextAnchorId = null;
+let contextLinkId = null;
 let hoverThoughtId = null;
+let selectedLinkId = null;
 let undoStack = [];
 let redoStack = [];
 let showInboxOnly = false;
@@ -336,6 +338,14 @@ const els = {
   nodeCreateInput: document.querySelector("#nodeCreateInput"),
   nodeCreateRelationInput: document.querySelector("#nodeCreateRelationInput"),
   nodeCreateCancelButton: document.querySelector("#nodeCreateCancelButton"),
+  linkEditForm: document.querySelector("#linkEditForm"),
+  linkNameInput: document.querySelector("#linkNameInput"),
+  linkDirectionInput: document.querySelector("#linkDirectionInput"),
+  linkUnlinkButton: document.querySelector("#linkUnlinkButton"),
+  linkKeepInput: document.querySelector("#linkKeepInput"),
+  linkRetargetInput: document.querySelector("#linkRetargetInput"),
+  linkRetargetRelationInput: document.querySelector("#linkRetargetRelationInput"),
+  linkRetargetButton: document.querySelector("#linkRetargetButton"),
 };
 
 init();
@@ -534,6 +544,7 @@ function sanitizeState(nextState) {
       from: link.from,
       to: link.to,
       type: link.type === "related" ? "related" : "parent",
+      name: String(link.name || "").slice(0, 80),
     }));
   if (!ids.has(clean.selectedId)) {
     clean.selectedId = clean.thoughts[0]?.id || null;
@@ -705,6 +716,10 @@ function bindEvents() {
   els.graph.addEventListener("wheel", onWheel, { passive: false });
   els.nodeCreateForm.addEventListener("submit", onNodeCreateSubmit);
   els.nodeCreateCancelButton.addEventListener("click", closeContextMenu);
+  els.linkEditForm.addEventListener("submit", onLinkEditSubmit);
+  els.linkUnlinkButton.addEventListener("click", unlinkContextLink);
+  els.linkKeepInput.addEventListener("change", renderLinkRetargetOptions);
+  els.linkRetargetButton.addEventListener("click", retargetContextLink);
   document.addEventListener("pointerdown", onDocumentPointerDown);
   window.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -749,6 +764,7 @@ function measureGraph() {
 }
 
 function render() {
+  syncSelectedLink();
   renderProjectControls();
   applySettings();
   renderSidebarState();
@@ -864,6 +880,8 @@ function resetProjectSessionState() {
   focusPositions = null;
   hoverThoughtId = null;
   contextAnchorId = null;
+  contextLinkId = null;
+  selectedLinkId = null;
   els.searchInput.value = "";
   els.tagFilterInput.value = "";
 }
@@ -1003,11 +1021,15 @@ function renderDetails() {
   const connected = getConnections(selected.id);
   els.connectionCount.textContent = String(connected.length);
   els.connectionList.replaceChildren(
-    ...connected.map(({ thought, role }) => {
-      const item = document.createElement("button");
-      item.className = "connection-item";
-      item.type = "button";
-      item.addEventListener("click", () => selectThought(thought.id));
+    ...connected.map(({ linkId, linkName, thought, role }) => {
+      const item = document.createElement("div");
+      item.className = "connection-item connection-row";
+      if (linkName) item.title = linkName;
+
+      const openButton = document.createElement("button");
+      openButton.className = "connection-open";
+      openButton.type = "button";
+      openButton.addEventListener("click", () => selectThought(thought.id));
 
       const dot = document.createElement("span");
       dot.className = "thought-dot";
@@ -1018,7 +1040,16 @@ function renderDetails() {
       const roleBadge = document.createElement("span");
       roleBadge.className = "relation-badge";
       roleBadge.textContent = getConnectionRoleLabel(role);
-      item.append(dot, name, roleBadge);
+      openButton.append(dot, name, roleBadge);
+
+      const unlinkButton = document.createElement("button");
+      unlinkButton.className = "connection-unlink";
+      unlinkButton.type = "button";
+      unlinkButton.textContent = "Unlink";
+      unlinkButton.title = `Unlink ${selected.title} and ${thought.title}`;
+      unlinkButton.addEventListener("click", () => removeConnection(linkId));
+
+      item.append(openButton, unlinkButton);
       return item;
     }),
   );
@@ -1044,25 +1075,31 @@ function renderGraph() {
       const fromPos = positions.get(from.id) || from;
       const toPos = positions.get(to.id) || to;
       const isActiveLink = link.from === state.selectedId || link.to === state.selectedId;
+      const isSelectedLink = link.id === selectedLinkId;
       const isFocusLink = activeIds.has(link.from) && activeIds.has(link.to);
       const isPreviewLink = previewId && previewIds.has(link.from) && previewIds.has(link.to);
       const fromNodeBox = getNodeBox(link.from);
       const toNodeBox = getNodeBox(link.to);
       const endpoints = getTrimmedLinkEndpoints(fromPos, toPos, fromNodeBox, toNodeBox);
-      const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink ? 0.8 : 0);
+      const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink || isSelectedLink ? 0.8 : 0);
       const group = svg("g", {
-        class: `link-group${isActiveLink ? " active" : ""}${isPreviewLink ? " preview" : ""}${
+        class: `link-group${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${
           isFocusLink && !isActiveLink ? " context" : ""
         }${
-          state.selectedId && !isFocusLink ? " dimmed" : ""
+          state.selectedId && !isFocusLink && !isSelectedLink ? " dimmed" : ""
         }`,
+        "data-link-id": link.id,
       });
       group.append(svg("title", {}, `${from.title} ${getLinkDirectionText(link)} ${to.title}`));
       const linkAttrs = {
-        class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isPreviewLink ? " preview" : ""}${
+        class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${
           isFocusLink && !isActiveLink ? " context" : ""
         }`,
         style: `stroke-width: ${thickness}px`,
+      };
+      const hitAttrs = {
+        class: "link-hit",
+        "data-link-id": link.id,
       };
       const linkElement =
         state.settings.connectionType === "curve"
@@ -1077,21 +1114,35 @@ function renderGraph() {
               x2: endpoints.to.x,
               y2: endpoints.to.y,
             });
+      const hitElement =
+        state.settings.connectionType === "curve"
+          ? svg("path", {
+              ...hitAttrs,
+              d: getCurvePath(endpoints.from, endpoints.to),
+            })
+          : svg("line", {
+              ...hitAttrs,
+              x1: endpoints.from.x,
+              y1: endpoints.from.y,
+              x2: endpoints.to.x,
+              y2: endpoints.to.y,
+            });
+      group.append(hitElement);
       group.append(linkElement);
 
-      if (isActiveLink) {
+      if (isActiveLink || isSelectedLink || link.name) {
         const label = svg(
           "text",
           {
-            class: "relation-label active",
+            class: `relation-label${isActiveLink || isSelectedLink ? " active" : ""}`,
             x: (fromPos.x + toPos.x) / 2,
             y: (fromPos.y + toPos.y) / 2 - 8,
           },
-          getLinkLabel(link),
+          link.name || getLinkLabel(link),
         );
         group.append(label);
       }
-      const priority = isActiveLink ? 3 : isPreviewLink ? 2 : isFocusLink ? 1 : 0;
+      const priority = isSelectedLink ? 4 : isActiveLink ? 3 : isPreviewLink ? 2 : isFocusLink ? 1 : 0;
       return { element: group, priority };
     })
     .filter(Boolean)
@@ -1316,6 +1367,18 @@ function addLink(activeId, targetId, relation = "parent-of") {
   });
 }
 
+function removeConnection(linkId) {
+  const link = state.links.find((item) => item.id === linkId);
+  if (!link) return;
+  pushHistory();
+  state.links = state.links.filter((item) => item.id !== linkId);
+  if (selectedLinkId === linkId) selectedLinkId = null;
+  if (contextLinkId === linkId) contextLinkId = null;
+  focusPositions = null;
+  render();
+  persistState();
+}
+
 function deleteSelectedThought() {
   const selected = getSelectedThought();
   if (!selected) return;
@@ -1325,12 +1388,15 @@ function deleteSelectedThought() {
   state.thoughts = state.thoughts.filter((thought) => thought.id !== selected.id);
   state.links = state.links.filter((link) => link.from !== selected.id && link.to !== selected.id);
   state.selectedId = state.thoughts[0]?.id || null;
+  selectedLinkId = null;
+  contextLinkId = null;
   focusPositions = null;
   render();
   persistState();
 }
 
 function selectThought(id, options = {}) {
+  selectedLinkId = null;
   if (id && isInboxThought(id)) {
     state.selectedId = id;
     renderThoughtList();
@@ -1759,12 +1825,16 @@ function getConnections(id) {
     .map((link) => {
       if (link.type === "related") {
         return {
+          linkId: link.id,
+          linkName: link.name || "",
           thought: getThought(link.from === id ? link.to : link.from),
           role: "related",
         };
       }
       const isParent = link.to === id;
       return {
+        linkId: link.id,
+        linkName: link.name || "",
         thought: getThought(isParent ? link.from : link.to),
         role: isParent ? "parent" : "child",
       };
@@ -2104,6 +2174,14 @@ function onPointerDown(event) {
   if (event.button !== 0) return;
   event.preventDefault();
   els.graph.setPointerCapture(event.pointerId);
+  const link = event.target.closest(".link-group");
+  if (link) {
+    selectLink(link.dataset.linkId);
+    pointerMode = null;
+    pointerStart = null;
+    return;
+  }
+
   const node = event.target.closest(".node");
 
   if (node) {
@@ -2115,6 +2193,7 @@ function onPointerDown(event) {
     return;
   }
 
+  selectedLinkId = null;
   pointerMode = { type: "pan" };
   pointerStart = {
     clientX: event.clientX,
@@ -2144,12 +2223,20 @@ function onPointerUp() {
 }
 
 function onGraphContextMenu(event) {
+  const link = event.target.closest(".link-group");
+  if (link) {
+    event.preventDefault();
+    selectLink(link.dataset.linkId);
+    openLinkContextMenu(link.dataset.linkId, event.clientX, event.clientY);
+    return;
+  }
+
   const node = event.target.closest(".node");
   if (!node) return;
   event.preventDefault();
   contextAnchorId = node.dataset.id;
   setHoverThought(contextAnchorId);
-  openContextMenu(event.clientX, event.clientY);
+  openNodeContextMenu(event.clientX, event.clientY);
 }
 
 function updateHoverThought(event) {
@@ -2172,22 +2259,50 @@ function clearHoverThought() {
   setHoverThought(null);
 }
 
-function openContextMenu(clientX, clientY) {
+function selectLink(linkId) {
+  if (!getLink(linkId)) return;
+  selectedLinkId = linkId;
+  renderGraph();
+}
+
+function openNodeContextMenu(clientX, clientY) {
+  contextLinkId = null;
+  els.nodeCreateForm.hidden = false;
+  els.linkEditForm.hidden = true;
   els.contextMenu.hidden = false;
-  const width = 260;
-  const height = 178;
+  els.nodeCreateInput.value = "";
+  els.nodeCreateRelationInput.value = "parent-of";
+  positionContextMenu(clientX, clientY);
+  requestAnimationFrame(() => els.nodeCreateInput.focus());
+}
+
+function openLinkContextMenu(linkId, clientX, clientY) {
+  const link = getLink(linkId);
+  if (!link) return;
+  contextAnchorId = null;
+  contextLinkId = linkId;
+  els.nodeCreateForm.hidden = true;
+  els.linkEditForm.hidden = false;
+  els.contextMenu.hidden = false;
+  renderLinkEditForm(link);
+  positionContextMenu(clientX, clientY);
+  requestAnimationFrame(() => els.linkNameInput.focus());
+}
+
+function positionContextMenu(clientX, clientY) {
+  const bounds = els.contextMenu.getBoundingClientRect();
+  const width = Math.max(bounds.width, 280);
+  const height = Math.max(bounds.height, 178);
   const x = Math.min(clientX, window.innerWidth - width - 12);
   const y = Math.min(clientY, window.innerHeight - height - 12);
   els.contextMenu.style.left = `${Math.max(12, x)}px`;
   els.contextMenu.style.top = `${Math.max(12, y)}px`;
-  els.nodeCreateInput.value = "";
-  els.nodeCreateRelationInput.value = "parent-of";
-  requestAnimationFrame(() => els.nodeCreateInput.focus());
 }
 
 function closeContextMenu() {
   els.contextMenu.hidden = true;
   contextAnchorId = null;
+  contextLinkId = null;
 }
 
 function onNodeCreateSubmit(event) {
@@ -2195,6 +2310,110 @@ function onNodeCreateSubmit(event) {
   const title = els.nodeCreateInput.value.trim();
   if (!title || !contextAnchorId) return;
   addThought(title, contextAnchorId, els.nodeCreateRelationInput.value);
+  closeContextMenu();
+}
+
+function renderLinkEditForm(link = getLink(contextLinkId)) {
+  if (!link) return;
+  const from = getThought(link.from);
+  const to = getThought(link.to);
+  if (!from || !to) return;
+  els.linkNameInput.value = link.name || "";
+  els.linkDirectionInput.options[0].textContent = `${from.title} parent of ${to.title}`;
+  els.linkDirectionInput.options[1].textContent = `${to.title} parent of ${from.title}`;
+  els.linkDirectionInput.value = link.type === "related" ? "related" : "parent-forward";
+  els.linkKeepInput.replaceChildren(optionElement(from.id, `Keep ${from.title}`), optionElement(to.id, `Keep ${to.title}`));
+  els.linkKeepInput.value = [link.from, link.to].includes(state.selectedId) ? state.selectedId : link.from;
+  renderLinkRetargetOptions();
+}
+
+function renderLinkRetargetOptions() {
+  const keepId = els.linkKeepInput.value;
+  const options = state.thoughts
+    .filter((thought) => thought.id !== keepId)
+    .map((thought) => optionElement(thought.id, thought.title));
+  els.linkRetargetInput.replaceChildren(...options);
+}
+
+function onLinkEditSubmit(event) {
+  event.preventDefault();
+  const link = getLink(contextLinkId);
+  if (!link) return;
+  const direction = els.linkDirectionInput.value;
+  const nextLink = {
+    ...link,
+    name: els.linkNameInput.value.trim(),
+    type: direction === "related" ? "related" : "parent",
+    from: direction === "parent-reverse" ? link.to : link.from,
+    to: direction === "parent-reverse" ? link.from : link.to,
+  };
+  if (isDuplicateLink(nextLink, link.id)) {
+    window.alert("That connection already exists.");
+    return;
+  }
+  pushHistory();
+  link.name = nextLink.name;
+  link.type = nextLink.type;
+  link.from = nextLink.from;
+  link.to = nextLink.to;
+  selectedLinkId = link.id;
+  focusPositions = null;
+  render();
+  persistState();
+  closeContextMenu();
+}
+
+function unlinkContextLink() {
+  const linkId = contextLinkId;
+  if (!linkId) return;
+  removeConnection(linkId);
+  closeContextMenu();
+}
+
+function retargetContextLink() {
+  const link = getLink(contextLinkId);
+  const keepId = els.linkKeepInput.value;
+  const targetId = els.linkRetargetInput.value;
+  if (!link || !keepId || !targetId || keepId === targetId) return;
+
+  const relation = els.linkRetargetRelationInput.value;
+  let nextFrom = keepId;
+  let nextTo = targetId;
+  let nextType = relation === "related" ? "related" : "parent";
+  if (relation === "child-of") {
+    nextFrom = targetId;
+    nextTo = keepId;
+  } else if (relation === "sibling") {
+    const parent = getParentThoughts(keepId)[0];
+    if (!parent) {
+      window.alert("This thought needs a parent before another thought can be placed as its sibling.");
+      return;
+    }
+    nextFrom = parent.id;
+    nextTo = targetId;
+    nextType = "parent";
+  }
+
+  const nextLink = {
+    ...link,
+    from: nextFrom,
+    to: nextTo,
+    type: nextType,
+    name: els.linkNameInput.value.trim(),
+  };
+  if (isDuplicateLink(nextLink, link.id)) {
+    window.alert("That connection already exists.");
+    return;
+  }
+  pushHistory();
+  link.from = nextLink.from;
+  link.to = nextLink.to;
+  link.type = nextLink.type;
+  link.name = nextLink.name;
+  selectedLinkId = link.id;
+  focusPositions = null;
+  render();
+  persistState();
   closeContextMenu();
 }
 
@@ -2243,9 +2462,10 @@ function exportMarkdown() {
         connections
           .slice()
           .sort((a, b) => a.thought.title.localeCompare(b.thought.title))
-          .forEach(({ thought: other, role }) => {
+          .forEach(({ thought: other, role, linkName }) => {
             const label = role === "related" ? "Related" : role === "parent" ? "Parent" : "Child";
-            lines.push(`  - ${label}: [[${other.title}]]`);
+            const name = linkName ? ` (${linkName})` : "";
+            lines.push(`  - ${label}${name}: [[${other.title}]]`);
           });
       }
       if (thought.note.trim()) {
@@ -2308,6 +2528,25 @@ function importMap(event) {
 
 function getThought(id) {
   return state.thoughts.find((thought) => thought.id === id);
+}
+
+function getLink(id) {
+  return state.links.find((link) => link.id === id);
+}
+
+function syncSelectedLink() {
+  if (selectedLinkId && !getLink(selectedLinkId)) selectedLinkId = null;
+  if (contextLinkId && !getLink(contextLinkId)) contextLinkId = null;
+}
+
+function isDuplicateLink(nextLink, ignoreId = null) {
+  return state.links.some((link) => {
+    if (link.id === ignoreId) return false;
+    if (nextLink.type === "related") {
+      return link.type === "related" && ((link.from === nextLink.from && link.to === nextLink.to) || (link.from === nextLink.to && link.to === nextLink.from));
+    }
+    return link.type !== "related" && link.from === nextLink.from && link.to === nextLink.to;
+  });
 }
 
 function getSelectedThought() {

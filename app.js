@@ -2,6 +2,7 @@ const DB_NAME = "thoughts-mapper";
 const DB_VERSION = 1;
 const STORE_NAME = "documents";
 const DOC_KEY = "main";
+const APP_DATA_VERSION = 2;
 const HISTORY_LIMIT = 60;
 
 const kindStyles = {
@@ -94,12 +95,146 @@ const seedState = {
     theme: "light",
     background: "pastel-mint",
     lineThickness: 2.5,
-    connectionType: "straight",
+    connectionType: "curve",
     lineEndpoint: "floating",
   },
 };
 
+const templateCatalog = [
+  {
+    id: "project-tracker",
+    name: "Project tracker",
+    root: "Project tracker",
+    tags: ["project"],
+    children: [
+      ["Goals", "question", "What does done look like?\n- [ ] Define outcome\n- [ ] Define success measure"],
+      ["Milestones", "project", "- [ ] Plan first milestone\n- [ ] Review risks"],
+      ["Next actions", "idea", "- [ ] Add next action\n- [ ] Assign owner"],
+      ["Risks", "question", "Track open risks and decisions."],
+      ["Resources", "resource", "Links, notes, references, and files to gather."],
+    ],
+  },
+  {
+    id: "helpdesk-knowledge-base",
+    name: "Helpdesk ticket knowledge base",
+    root: "Helpdesk knowledge base",
+    tags: ["support"],
+    children: [
+      ["Common tickets", "question", "Recurring issues and known fixes."],
+      ["Troubleshooting steps", "resource", "- [ ] Reproduce\n- [ ] Check logs\n- [ ] Confirm resolution"],
+      ["Escalation paths", "person", "Who to contact when the fix needs help."],
+      ["Known workarounds", "idea", "Temporary fixes that users can apply safely."],
+      ["Customer patterns", "idea", "Signals that point to repeat problems."],
+    ],
+  },
+  {
+    id: "bible-study-prep",
+    name: "Bible study prep",
+    root: "Bible study prep",
+    tags: ["study"],
+    children: [
+      ["Passage", "resource", "Primary text, translation notes, and cross references."],
+      ["Observations", "idea", "What does the text say?"],
+      ["Interpretation", "question", "What does it mean in context?"],
+      ["Application", "idea", "How should this shape belief, action, or prayer?"],
+      ["Discussion questions", "question", "- [ ] Opening question\n- [ ] Main question\n- [ ] Reflection question"],
+    ],
+  },
+  {
+    id: "sermon-devotional-outline",
+    name: "Sermon/devotional outline",
+    root: "Sermon outline",
+    tags: ["outline"],
+    children: [
+      ["Big idea", "idea", "The single sentence people should remember."],
+      ["Scripture", "resource", "Main text and supporting passages."],
+      ["Outline", "project", "- [ ] Introduction\n- [ ] Point one\n- [ ] Point two\n- [ ] Close"],
+      ["Illustrations", "resource", "Stories, examples, and images."],
+      ["Response", "question", "What should listeners do next?"],
+    ],
+  },
+  {
+    id: "research-notes",
+    name: "Research notes",
+    root: "Research notes",
+    tags: ["research"],
+    children: [
+      ["Research question", "question", "What are you trying to understand?"],
+      ["Sources", "resource", "Books, papers, pages, interviews, and datasets."],
+      ["Findings", "idea", "Confirmed observations and useful excerpts."],
+      ["Open questions", "question", "What still needs checking?"],
+      ["Synthesis", "idea", "Patterns, conclusions, and next claims to test."],
+    ],
+  },
+  {
+    id: "meeting-notes",
+    name: "Meeting notes",
+    root: "Meeting notes",
+    tags: ["meeting"],
+    children: [
+      ["Agenda", "project", "- [ ] Topic one\n- [ ] Topic two\n- [ ] Topic three"],
+      ["Decisions", "idea", "Decisions made during the meeting."],
+      ["Action items", "project", "- [ ] Action / owner / date"],
+      ["People", "person", "Attendees, stakeholders, and follow-ups."],
+      ["Parking lot", "question", "Important items to revisit later."],
+    ],
+  },
+  {
+    id: "personal-crm",
+    name: "Personal CRM",
+    root: "Personal CRM",
+    tags: ["people"],
+    children: [
+      ["People to follow up", "person", "- [ ] Name / topic / date"],
+      ["Shared interests", "idea", "Topics, projects, and personal details worth remembering."],
+      ["Introductions", "person", "People who should meet each other."],
+      ["Conversation notes", "resource", "Notes from calls, coffees, and messages."],
+      ["Opportunities to help", "question", "Where can you be useful?"],
+    ],
+  },
+  {
+    id: "learning-roadmap",
+    name: "Learning roadmap",
+    root: "Learning roadmap",
+    tags: ["learning"],
+    children: [
+      ["Why learn this", "question", "Purpose, motivation, and desired outcome."],
+      ["Core concepts", "idea", "Ideas that everything else depends on."],
+      ["Practice projects", "project", "- [ ] Small practice\n- [ ] Real-world practice"],
+      ["Resources", "resource", "Courses, books, videos, docs, and mentors."],
+      ["Progress review", "question", "What is clear now? What still feels confusing?"],
+    ],
+  },
+  {
+    id: "book-summary",
+    name: "Book summary",
+    root: "Book summary",
+    tags: ["book"],
+    children: [
+      ["Main argument", "idea", "What is the book really saying?"],
+      ["Key chapters", "resource", "Chapter-by-chapter notes."],
+      ["Quotes", "resource", "Useful short excerpts and page references."],
+      ["Questions", "question", "Claims to test or discuss."],
+      ["Actions", "project", "- [ ] One idea to apply\n- [ ] One idea to share"],
+    ],
+  },
+  {
+    id: "software-architecture-map",
+    name: "Software architecture map",
+    root: "Software architecture",
+    tags: ["software"],
+    children: [
+      ["User flows", "person", "People, roles, and core workflows."],
+      ["Core modules", "project", "Major parts of the system and ownership."],
+      ["Data model", "resource", "Entities, relationships, storage, and migrations."],
+      ["Integrations", "resource", "External APIs, queues, jobs, and services."],
+      ["Risks and tradeoffs", "question", "Constraints, failure modes, and open decisions."],
+    ],
+  },
+];
+
 let state = clone(seedState);
+let appData = null;
 let db;
 let storageMode = "indexeddb";
 let saveTimer;
@@ -119,6 +254,11 @@ let sidebarHidden = false;
 const els = {
   appShell: document.querySelector("#appShell"),
   saveState: document.querySelector("#saveState"),
+  projectSelect: document.querySelector("#projectSelect"),
+  projectNameInput: document.querySelector("#projectNameInput"),
+  templateSelect: document.querySelector("#templateSelect"),
+  newProjectNameInput: document.querySelector("#newProjectNameInput"),
+  createTemplateButton: document.querySelector("#createTemplateButton"),
   searchInput: document.querySelector("#searchInput"),
   quickCaptureForm: document.querySelector("#quickCaptureForm"),
   quickCaptureInput: document.querySelector("#quickCaptureInput"),
@@ -183,11 +323,12 @@ init();
 async function init() {
   try {
     db = await openDatabase();
-    state = sanitizeState((await loadState()) || seedState);
+    appData = sanitizeAppData((await loadState()) || seedState);
   } catch {
     storageMode = "localstorage";
-    state = sanitizeState(loadLocalState() || seedState);
+    appData = sanitizeAppData(loadLocalState() || seedState);
   }
+  state = clone(getActiveProject().state);
   measureGraph();
   bindEvents();
   render();
@@ -232,14 +373,15 @@ function persistState() {
   clearTimeout(statusTimer);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    syncActiveProject();
     if (storageMode === "localstorage") {
-      localStorage.setItem(DB_NAME, JSON.stringify(state));
+      localStorage.setItem(DB_NAME, JSON.stringify(appData));
       els.saveState.textContent = "Saved";
       return;
     }
 
     const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).put(state, DOC_KEY);
+    tx.objectStore(STORE_NAME).put(appData, DOC_KEY);
     tx.oncomplete = () => {
       els.saveState.textContent = "Saved";
     };
@@ -255,6 +397,72 @@ function setStatus(message, duration = 1400) {
   statusTimer = setTimeout(() => {
     els.saveState.textContent = "Saved";
   }, duration);
+}
+
+function sanitizeAppData(raw) {
+  if (raw && Array.isArray(raw.projects)) {
+    const projects = raw.projects
+      .map((project, index) => sanitizeProject(project, index))
+      .filter(Boolean);
+    if (!projects.length) projects.push(createProject("Thoughts Mapper", seedState));
+    const activeProjectId = projects.some((project) => project.id === raw.activeProjectId)
+      ? raw.activeProjectId
+      : projects[0].id;
+    return {
+      version: APP_DATA_VERSION,
+      activeProjectId,
+      projects,
+    };
+  }
+
+  return {
+    version: APP_DATA_VERSION,
+    activeProjectId: "project-main",
+    projects: [
+      {
+        id: "project-main",
+        name: "My first map",
+        updatedAt: new Date().toISOString(),
+        state: sanitizeState(raw || seedState),
+      },
+    ],
+  };
+}
+
+function sanitizeProject(project, index = 0) {
+  if (!project) return null;
+  return {
+    id: String(project.id || makeId("project")),
+    name: String(project.name || `Project ${index + 1}`).slice(0, 80),
+    updatedAt: project.updatedAt || new Date().toISOString(),
+    state: sanitizeState(project.state || seedState),
+  };
+}
+
+function createProject(name, projectState) {
+  return {
+    id: makeId("project"),
+    name: String(name || "Untitled project").slice(0, 80),
+    updatedAt: new Date().toISOString(),
+    state: sanitizeState(projectState || seedState),
+  };
+}
+
+function getActiveProject() {
+  let project = appData.projects.find((item) => item.id === appData.activeProjectId);
+  if (!project) {
+    project = appData.projects[0] || createProject("Thoughts Mapper", seedState);
+    appData.projects = [project];
+    appData.activeProjectId = project.id;
+  }
+  return project;
+}
+
+function syncActiveProject() {
+  if (!appData) return;
+  const project = getActiveProject();
+  project.state = sanitizeState(state);
+  project.updatedAt = new Date().toISOString();
 }
 
 function sanitizeState(nextState) {
@@ -283,7 +491,7 @@ function sanitizeState(nextState) {
     lineThickness: clamp(Number(clean.settings?.lineThickness) || 2.5, 1, 8),
     connectionType: ["straight", "curve"].includes(clean.settings?.connectionType)
       ? clean.settings.connectionType
-      : "straight",
+      : "curve",
     lineEndpoint: ["floating", "touching"].includes(clean.settings?.lineEndpoint)
       ? clean.settings.lineEndpoint
       : "floating",
@@ -318,6 +526,9 @@ function bindEvents() {
     renderGraph();
   });
 
+  els.projectSelect.addEventListener("change", switchProject);
+  els.projectNameInput.addEventListener("change", renameActiveProject);
+  els.createTemplateButton.addEventListener("click", createProjectFromSelectedTemplate);
   els.searchInput.addEventListener("input", renderThoughtList);
   els.quickCaptureForm.addEventListener("submit", onQuickCaptureSubmit);
   els.tagFilterInput.addEventListener("change", renderThoughtList);
@@ -488,6 +699,7 @@ function measureGraph() {
 }
 
 function render() {
+  renderProjectControls();
   applySettings();
   renderSidebarState();
   renderHistoryControls();
@@ -510,6 +722,131 @@ function applySettings() {
 function getColourSchemeId(theme, background) {
   const match = Object.entries(colourSchemes).find(([, scheme]) => scheme.theme === theme && scheme.background === background);
   return match ? match[0] : "light-mint";
+}
+
+function renderProjectControls() {
+  const currentTemplate = els.templateSelect.value;
+  const activeProject = getActiveProject();
+  els.projectSelect.replaceChildren(
+    ...appData.projects.map((project) => {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = project.name;
+      return option;
+    }),
+  );
+  els.projectSelect.value = appData.activeProjectId;
+  if (document.activeElement !== els.projectNameInput) {
+    els.projectNameInput.value = activeProject.name;
+  }
+  els.templateSelect.replaceChildren(
+    optionElement("", "Choose template"),
+    ...templateCatalog.map((template) => optionElement(template.id, template.name)),
+  );
+  els.templateSelect.value = templateCatalog.some((template) => template.id === currentTemplate) ? currentTemplate : "";
+}
+
+function switchProject() {
+  const nextProjectId = els.projectSelect.value;
+  if (!nextProjectId || nextProjectId === appData.activeProjectId) return;
+  syncActiveProject();
+  clearTimeout(saveTimer);
+  appData.activeProjectId = nextProjectId;
+  state = clone(getActiveProject().state);
+  resetProjectSessionState();
+  render();
+  requestAnimationFrame(fitToGraph);
+  persistState();
+  setStatus("Project switched");
+}
+
+function createProjectFromSelectedTemplate() {
+  const template = templateCatalog.find((item) => item.id === els.templateSelect.value);
+  if (!template) return;
+  syncActiveProject();
+  clearTimeout(saveTimer);
+  const projectName = els.newProjectNameInput.value.trim() || template.name;
+  const project = createProject(projectName, createTemplateState(template));
+  appData.projects.push(project);
+  appData.activeProjectId = project.id;
+  state = clone(project.state);
+  els.templateSelect.value = "";
+  els.newProjectNameInput.value = "";
+  resetProjectSessionState();
+  render();
+  requestAnimationFrame(fitToGraph);
+  persistState();
+  setStatus("Project created");
+}
+
+function renameActiveProject() {
+  const project = getActiveProject();
+  const name = els.projectNameInput.value.trim();
+  if (!name || name === project.name) {
+    els.projectNameInput.value = project.name;
+    return;
+  }
+  project.name = name.slice(0, 80);
+  project.updatedAt = new Date().toISOString();
+  renderProjectControls();
+  persistState();
+  setStatus("Project renamed");
+}
+
+function resetProjectSessionState() {
+  undoStack = [];
+  redoStack = [];
+  showInboxOnly = false;
+  focusPositions = null;
+  hoverThoughtId = null;
+  contextAnchorId = null;
+  els.searchInput.value = "";
+  els.tagFilterInput.value = "";
+}
+
+function createTemplateState(template) {
+  const rootId = `template-${template.id}-root`;
+  const thoughts = [
+    {
+      id: rootId,
+      title: template.root,
+      kind: "project",
+      note: `Starter map for ${template.name}.`,
+      tags: normalizeTags(template.tags || []),
+      x: 0,
+      y: 0,
+    },
+  ];
+  const links = [];
+  const spacing = 210;
+  const startX = -((template.children.length - 1) * spacing) / 2;
+
+  template.children.forEach(([title, kind, note], index) => {
+    const id = `template-${template.id}-${index + 1}`;
+    thoughts.push({
+      id,
+      title,
+      kind,
+      note,
+      tags: normalizeTags(template.tags || []),
+      x: startX + index * spacing,
+      y: 235,
+    });
+    links.push({ id: `template-${template.id}-link-${index + 1}`, from: rootId, to: id, type: "parent" });
+  });
+
+  if (template.children.length >= 4) {
+    links.push({ id: `template-${template.id}-related-1`, from: `template-${template.id}-1`, to: `template-${template.id}-2`, type: "related" });
+    links.push({ id: `template-${template.id}-related-2`, from: `template-${template.id}-3`, to: `template-${template.id}-4`, type: "related" });
+  }
+
+  return sanitizeState({
+    thoughts,
+    links,
+    selectedId: rootId,
+    view: { x: 0, y: 0, scale: 1 },
+    settings: clone(seedState.settings),
+  });
 }
 
 function renderThoughtList() {
@@ -1718,7 +2055,8 @@ function onWheel(event) {
 }
 
 function exportMap() {
-  downloadFile("thoughts-map.json", JSON.stringify(state, null, 2), "application/json");
+  syncActiveProject();
+  downloadFile("thoughts-mapper-backup.json", JSON.stringify(appData, null, 2), "application/json");
 }
 
 function exportMarkdown() {
@@ -1762,22 +2100,33 @@ function downloadFile(filename, content, type) {
 function importMap(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  const approved = window.confirm("Importing this JSON backup will replace the current map, including thoughts, notes, links, tags, positions, and settings.");
-  if (!approved) {
-    event.target.value = "";
-    setStatus("Import cancelled");
-    return;
-  }
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      pushHistory();
-      state = sanitizeState(JSON.parse(String(reader.result)));
-      focusPositions = null;
+      const parsed = JSON.parse(String(reader.result));
+      if (parsed && Array.isArray(parsed.projects)) {
+        const approved = window.confirm("Importing this JSON backup will replace all Thoughts Mapper projects on this browser.");
+        if (!approved) {
+          setStatus("Import cancelled");
+          return;
+        }
+        appData = sanitizeAppData(parsed);
+        state = clone(getActiveProject().state);
+      } else {
+        const approved = window.confirm("Importing this JSON map will replace the current project, including thoughts, notes, links, tags, positions, and settings.");
+        if (!approved) {
+          setStatus("Import cancelled");
+          return;
+        }
+        pushHistory();
+        state = sanitizeState(parsed);
+        syncActiveProject();
+      }
+      resetProjectSessionState();
       render();
-      fitToGraph();
+      requestAnimationFrame(fitToGraph);
       persistState();
-      setStatus("Backup imported");
+      setStatus("JSON imported");
     } catch {
       window.alert("That file could not be imported.");
       setStatus("Import failed");

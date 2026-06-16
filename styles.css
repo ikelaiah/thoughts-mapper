@@ -295,6 +295,34 @@ h2 {
   margin-top: 2px;
 }
 
+.project-controls {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.32);
+}
+
+body[data-theme="dark"] .project-controls {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.project-controls button {
+  min-height: 34px;
+}
+
+.compact-field {
+  gap: 5px;
+}
+
+.compact-field select,
+.compact-field input,
+.project-controls > input {
+  height: 34px;
+  font-size: 13px;
+}
+
 .quick-add,
 .search-box {
   display: grid;

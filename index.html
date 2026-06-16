@@ -17,6 +17,25 @@
           </div>
         </header>
 
+        <div class="project-controls" aria-label="Projects">
+          <label class="field compact-field">
+            <span>Project</span>
+            <select id="projectSelect"></select>
+          </label>
+          <label class="field compact-field">
+            <span>Project name</span>
+            <input id="projectNameInput" type="text" maxlength="80" />
+          </label>
+          <label class="field compact-field">
+            <span>New from template</span>
+            <select id="templateSelect">
+              <option value="">Choose template</option>
+            </select>
+          </label>
+          <input id="newProjectNameInput" type="text" maxlength="80" placeholder="New project name" autocomplete="off" />
+          <button id="createTemplateButton" type="button">Create project</button>
+        </div>
+
         <label class="search-box">
           <span aria-hidden="true"></span>
           <input id="searchInput" type="search" placeholder="Search titles, notes, tags" autocomplete="off" />

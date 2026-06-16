@@ -278,6 +278,7 @@ let undoStack = [];
 let redoStack = [];
 let showInboxOnly = false;
 let sidebarHidden = false;
+let detailsHidden = false;
 let newProjectPanelOpen = false;
 let moreMenuOpen = false;
 let inboxReviewOpen = false;
@@ -306,6 +307,7 @@ const els = {
   markdownExportButton: document.querySelector("#markdownExportButton"),
   importInput: document.querySelector("#importInput"),
   sidebarToggleButton: document.querySelector("#sidebarToggleButton"),
+  detailsToggleButton: document.querySelector("#detailsToggleButton"),
   moreButton: document.querySelector("#moreButton"),
   moreMenu: document.querySelector("#moreMenu"),
   undoButton: document.querySelector("#undoButton"),
@@ -648,6 +650,7 @@ function bindEvents() {
   els.markdownExportButton.addEventListener("click", exportMarkdown);
   els.importInput.addEventListener("change", importMap);
   els.sidebarToggleButton.addEventListener("click", toggleSidebar);
+  els.detailsToggleButton.addEventListener("click", toggleDetailsPanel);
   els.moreButton.addEventListener("click", toggleMoreMenu);
   els.undoButton.addEventListener("click", () => {
     undo();
@@ -867,7 +870,7 @@ function render() {
   syncSelectedLink();
   renderProjectControls();
   applySettings();
-  renderSidebarState();
+  renderPanelState();
   renderMoreMenu();
   renderHistoryControls();
   renderThoughtList();
@@ -2448,7 +2451,7 @@ function keepInboxReviewThought() {
 function focusQuickCapture() {
   if (sidebarHidden) {
     sidebarHidden = false;
-    renderSidebarState();
+    renderPanelState();
     measureGraph();
     renderGraph();
   }
@@ -2459,7 +2462,7 @@ function focusQuickCapture() {
 function focusSearch() {
   if (sidebarHidden) {
     sidebarHidden = false;
-    renderSidebarState();
+    renderPanelState();
     measureGraph();
     renderGraph();
   }
@@ -2656,20 +2659,34 @@ function renderMoreMenu() {
 
 function toggleSidebar() {
   sidebarHidden = !sidebarHidden;
-  renderSidebarState();
+  renderPanelState();
+  refreshGraphAfterPanelChange();
+}
+
+function toggleDetailsPanel() {
+  detailsHidden = !detailsHidden;
+  renderPanelState();
+  refreshGraphAfterPanelChange();
+}
+
+function refreshGraphAfterPanelChange() {
   measureGraph();
   renderGraph();
   window.setTimeout(() => {
     measureGraph();
     renderGraph();
-  }, 260);
+  }, 300);
 }
 
-function renderSidebarState() {
+function renderPanelState() {
   els.appShell.classList.toggle("sidebar-hidden", sidebarHidden);
+  els.appShell.classList.toggle("details-hidden", detailsHidden);
   els.sidebarToggleButton.textContent = sidebarHidden ? "Show list" : "Hide list";
   els.sidebarToggleButton.title = sidebarHidden ? "Show thoughts sidebar" : "Hide thoughts sidebar";
   els.sidebarToggleButton.setAttribute("aria-label", els.sidebarToggleButton.title);
+  els.detailsToggleButton.textContent = detailsHidden ? "Show details" : "Hide details";
+  els.detailsToggleButton.title = detailsHidden ? "Show thought details" : "Hide thought details";
+  els.detailsToggleButton.setAttribute("aria-label", els.detailsToggleButton.title);
 }
 
 function onPointerDown(event) {

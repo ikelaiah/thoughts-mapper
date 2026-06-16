@@ -8,7 +8,7 @@
   </head>
   <body>
     <div id="appShell" class="app-shell">
-      <aside class="left-panel" aria-label="Thoughts">
+      <aside class="left-panel" aria-label="Library">
         <header class="brand">
           <div class="brand-mark" aria-hidden="true">TM</div>
           <div>
@@ -17,7 +17,7 @@
           </div>
         </header>
 
-        <div class="project-controls" aria-label="Projects">
+        <div class="project-controls collapsed" id="projectControls" aria-label="Projects">
           <label class="field compact-field">
             <span>Project</span>
             <select id="projectSelect"></select>
@@ -26,14 +26,17 @@
             <span>Project name</span>
             <input id="projectNameInput" type="text" maxlength="80" />
           </label>
-          <label class="field compact-field">
-            <span>New from template</span>
-            <select id="templateSelect">
-              <option value="">Choose template</option>
-            </select>
-          </label>
-          <input id="newProjectNameInput" type="text" maxlength="80" placeholder="New project name" autocomplete="off" />
-          <button id="createTemplateButton" type="button">Create project</button>
+          <button id="newProjectToggleButton" type="button">New project</button>
+          <div id="newProjectPanel" class="new-project-panel" hidden>
+            <label class="field compact-field">
+              <span>Template</span>
+              <select id="templateSelect">
+                <option value="">Choose template</option>
+              </select>
+            </label>
+            <input id="newProjectNameInput" type="text" maxlength="80" placeholder="New project name" autocomplete="off" />
+            <button id="createTemplateButton" type="button">Create project</button>
+          </div>
         </div>
 
         <label class="search-box">
@@ -42,9 +45,10 @@
         </label>
 
         <form id="quickCaptureForm" class="quick-add">
-          <input id="quickCaptureInput" type="text" maxlength="80" placeholder="Capture to inbox" autocomplete="off" />
-          <button type="submit" title="Capture unlinked thought" aria-label="Capture unlinked thought">+</button>
+          <input id="quickCaptureInput" type="text" maxlength="80" placeholder="Capture a thought..." autocomplete="off" />
+          <button type="submit" title="Capture to inbox" aria-label="Capture to inbox">Add</button>
         </form>
+        <div class="shortcut-hint">Ctrl+K to capture</div>
 
         <div class="filter-row">
           <select id="tagFilterInput" aria-label="Filter by tag">
@@ -54,7 +58,7 @@
         </div>
 
         <div class="section-heading">
-          <span>Thoughts</span>
+          <span>Library</span>
           <span id="thoughtCount">0</span>
         </div>
         <nav id="thoughtList" class="thought-list" aria-label="Thought list"></nav>
@@ -80,12 +84,15 @@
         </div>
         <div class="stage-toolbar" aria-label="Map tools">
           <button id="sidebarToggleButton" type="button" title="Hide thoughts sidebar" aria-label="Hide thoughts sidebar">Hide list</button>
-          <button id="undoButton" type="button" title="Undo" aria-label="Undo">Undo</button>
-          <button id="redoButton" type="button" title="Redo" aria-label="Redo">Redo</button>
           <button id="fitButton" type="button" title="Fit map" aria-label="Fit map">Fit</button>
-          <button id="centerButton" type="button" title="Center thought" aria-label="Center thought">Center</button>
-          <button id="resetButton" type="button" title="Reset camera to default zoom and origin" aria-label="Reset camera to default zoom and origin">Reset</button>
           <button id="settingsButton" type="button" title="Open settings" aria-label="Open settings">Settings</button>
+          <button id="moreButton" type="button" title="More map tools" aria-label="More map tools">More</button>
+          <div id="moreMenu" class="more-menu" hidden>
+            <button id="undoButton" type="button" title="Undo" aria-label="Undo">Undo</button>
+            <button id="redoButton" type="button" title="Redo" aria-label="Redo">Redo</button>
+            <button id="centerButton" type="button" title="Center thought" aria-label="Center thought">Center thought</button>
+            <button id="resetButton" type="button" title="Reset camera to default zoom and origin" aria-label="Reset camera to default zoom and origin">Reset view</button>
+          </div>
         </div>
         <svg id="graph" role="img" aria-label="Visual thought graph">
           <defs>
@@ -103,41 +110,38 @@
 
       <aside class="right-panel" aria-label="Thought details">
         <section id="detailsEmpty" class="empty-state">
-          <h2>Map</h2>
+          <h2>Thought</h2>
           <p>Create or select a thought.</p>
         </section>
 
         <section id="detailsPanel" class="details-panel" hidden>
-          <div class="details-topline">
-            <span id="selectedType" class="type-pill">Idea</span>
+          <div class="thought-header">
+            <input id="titleInput" class="thought-title-input" type="text" maxlength="80" />
             <button id="deleteButton" class="danger-button" type="button">Delete</button>
           </div>
 
-          <label class="field">
-            <span>Title</span>
-            <input id="titleInput" type="text" maxlength="80" />
-          </label>
-
-          <label class="field">
-            <span>Kind</span>
-            <select id="kindInput">
-              <option value="idea">Idea</option>
-              <option value="project">Project</option>
-              <option value="person">Person</option>
-              <option value="resource">Resource</option>
-              <option value="question">Question</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Tags</span>
-            <input id="tagInput" type="text" placeholder="research, project, later" />
-          </label>
+          <div class="thought-meta-row">
+            <label class="field compact-field">
+              <span>Kind</span>
+              <select id="kindInput">
+                <option value="idea">Idea</option>
+                <option value="project">Project</option>
+                <option value="person">Person</option>
+                <option value="resource">Resource</option>
+                <option value="question">Question</option>
+              </select>
+            </label>
+            <label class="field compact-field">
+              <span>Tags</span>
+              <input id="tagInput" type="text" placeholder="research, project, later" />
+            </label>
+          </div>
+          <span id="selectedType" class="type-pill">Idea</span>
 
           <section id="inboxPlacementPanel" class="inbox-placement" hidden>
             <div>
               <strong>Inbox thought</strong>
-              <p>Place it when you know where it belongs.</p>
+              <p>It stays out of the map until you connect it.</p>
             </div>
             <div class="place-form">
               <select id="placeTargetInput" aria-label="Place with thought"></select>
@@ -170,16 +174,16 @@
             <label class="field">
               <span>Relation</span>
               <select id="linkRelationInput">
-                <option value="parent-of">Selected is parent of target</option>
-                <option value="child-of">Selected is child of target</option>
-                <option value="related">Related to</option>
+                <option value="parent-of">Make selected parent</option>
+                <option value="child-of">Make selected child</option>
+                <option value="related">Related</option>
               </select>
             </label>
             <button type="submit">Link</button>
           </form>
 
           <div class="section-heading">
-            <span>Connected</span>
+            <span>Connections</span>
             <span id="connectionCount">0</span>
           </div>
           <div id="connectionList" class="connection-list"></div>
@@ -198,6 +202,27 @@
         </section>
       </aside>
     </div>
+
+    <section id="inboxReviewPanel" class="inbox-review" hidden aria-label="Inbox review">
+      <header>
+        <div>
+          <h2>Inbox</h2>
+          <p id="inboxReviewProgress">No unplaced thoughts.</p>
+        </div>
+        <button id="inboxReviewCloseButton" type="button" aria-label="Close inbox review">Close</button>
+      </header>
+      <div class="inbox-review-body">
+        <strong id="inboxReviewTitle">Inbox clear</strong>
+        <p id="inboxReviewNote">Captured thoughts will appear here until you connect them.</p>
+        <select id="inboxReviewTargetInput" aria-label="Connect inbox thought to"></select>
+        <div class="inbox-review-actions">
+          <button id="inboxReviewChildButton" type="button">Make child</button>
+          <button id="inboxReviewParentButton" type="button">Make parent</button>
+          <button id="inboxReviewRelatedButton" type="button">Relate</button>
+          <button id="inboxReviewKeepButton" type="button">Keep in inbox</button>
+        </div>
+      </div>
+    </section>
 
     <div id="contextMenu" class="context-menu" hidden>
       <form id="nodeCreateForm">
@@ -258,6 +283,7 @@
               <option value="light-rain">Light rain</option>
               <option value="light-snow">Light snow</option>
               <option value="light-ocean">Light ocean</option>
+              <option value="dark-calm">Dark calm</option>
               <option value="dark-mint">Dark mint</option>
               <option value="dark-sky">Dark sky</option>
               <option value="dark-blush">Dark blush</option>

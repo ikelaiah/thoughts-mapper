@@ -21,6 +21,7 @@ const colourSchemes = {
   "light-rain": { theme: "light", background: "rain" },
   "light-snow": { theme: "light", background: "snow" },
   "light-ocean": { theme: "light", background: "ocean" },
+  "dark-calm": { theme: "dark", background: "calm" },
   "dark-mint": { theme: "dark", background: "pastel-mint" },
   "dark-sky": { theme: "dark", background: "pastel-sky" },
   "dark-blush": { theme: "dark", background: "pastel-blush" },
@@ -92,8 +93,8 @@ const seedState = {
   selectedId: "t-home",
   view: { x: 0, y: 0, scale: 1 },
   settings: {
-    theme: "light",
-    background: "pastel-mint",
+    theme: "dark",
+    background: "calm",
     lineThickness: 2.5,
     connectionType: "curve",
     lineEndpoint: "floating",
@@ -250,12 +251,19 @@ let undoStack = [];
 let redoStack = [];
 let showInboxOnly = false;
 let sidebarHidden = false;
+let newProjectPanelOpen = false;
+let moreMenuOpen = false;
+let inboxReviewOpen = false;
+let inboxReviewIndex = 0;
 
 const els = {
   appShell: document.querySelector("#appShell"),
   saveState: document.querySelector("#saveState"),
+  projectControls: document.querySelector("#projectControls"),
   projectSelect: document.querySelector("#projectSelect"),
   projectNameInput: document.querySelector("#projectNameInput"),
+  newProjectToggleButton: document.querySelector("#newProjectToggleButton"),
+  newProjectPanel: document.querySelector("#newProjectPanel"),
   templateSelect: document.querySelector("#templateSelect"),
   newProjectNameInput: document.querySelector("#newProjectNameInput"),
   createTemplateButton: document.querySelector("#createTemplateButton"),
@@ -271,6 +279,8 @@ const els = {
   markdownExportButton: document.querySelector("#markdownExportButton"),
   importInput: document.querySelector("#importInput"),
   sidebarToggleButton: document.querySelector("#sidebarToggleButton"),
+  moreButton: document.querySelector("#moreButton"),
+  moreMenu: document.querySelector("#moreMenu"),
   undoButton: document.querySelector("#undoButton"),
   redoButton: document.querySelector("#redoButton"),
   fitButton: document.querySelector("#fitButton"),
@@ -311,6 +321,16 @@ const els = {
   backlinkList: document.querySelector("#backlinkList"),
   mentionCount: document.querySelector("#mentionCount"),
   mentionList: document.querySelector("#mentionList"),
+  inboxReviewPanel: document.querySelector("#inboxReviewPanel"),
+  inboxReviewProgress: document.querySelector("#inboxReviewProgress"),
+  inboxReviewCloseButton: document.querySelector("#inboxReviewCloseButton"),
+  inboxReviewTitle: document.querySelector("#inboxReviewTitle"),
+  inboxReviewNote: document.querySelector("#inboxReviewNote"),
+  inboxReviewTargetInput: document.querySelector("#inboxReviewTargetInput"),
+  inboxReviewChildButton: document.querySelector("#inboxReviewChildButton"),
+  inboxReviewParentButton: document.querySelector("#inboxReviewParentButton"),
+  inboxReviewRelatedButton: document.querySelector("#inboxReviewRelatedButton"),
+  inboxReviewKeepButton: document.querySelector("#inboxReviewKeepButton"),
   contextMenu: document.querySelector("#contextMenu"),
   nodeCreateForm: document.querySelector("#nodeCreateForm"),
   nodeCreateInput: document.querySelector("#nodeCreateInput"),
@@ -474,6 +494,7 @@ function sanitizeState(nextState) {
     theme: ["light", "dark"].includes(clean.settings?.theme) ? clean.settings.theme : "light",
     background: [
       "pastel-mint",
+      "calm",
       "pastel-sky",
       "pastel-blush",
       "fireflies",
@@ -487,7 +508,7 @@ function sanitizeState(nextState) {
       "ocean",
     ].includes(clean.settings?.background)
       ? clean.settings.background
-      : "pastel-mint",
+      : "calm",
     lineThickness: clamp(Number(clean.settings?.lineThickness) || 2.5, 1, 8),
     connectionType: ["straight", "curve"].includes(clean.settings?.connectionType)
       ? clean.settings.connectionType
@@ -528,11 +549,17 @@ function bindEvents() {
 
   els.projectSelect.addEventListener("change", switchProject);
   els.projectNameInput.addEventListener("change", renameActiveProject);
+  els.newProjectToggleButton.addEventListener("click", toggleNewProjectPanel);
   els.createTemplateButton.addEventListener("click", createProjectFromSelectedTemplate);
   els.searchInput.addEventListener("input", renderThoughtList);
   els.quickCaptureForm.addEventListener("submit", onQuickCaptureSubmit);
   els.tagFilterInput.addEventListener("change", renderThoughtList);
   els.inboxFilterButton.addEventListener("click", () => {
+    const inboxThoughts = getInboxThoughts();
+    if (inboxThoughts.length) {
+      openInboxReview();
+      return;
+    }
     showInboxOnly = !showInboxOnly;
     renderThoughtList();
   });
@@ -540,11 +567,24 @@ function bindEvents() {
   els.markdownExportButton.addEventListener("click", exportMarkdown);
   els.importInput.addEventListener("change", importMap);
   els.sidebarToggleButton.addEventListener("click", toggleSidebar);
-  els.undoButton.addEventListener("click", undo);
-  els.redoButton.addEventListener("click", redo);
+  els.moreButton.addEventListener("click", toggleMoreMenu);
+  els.undoButton.addEventListener("click", () => {
+    undo();
+    closeMoreMenu();
+  });
+  els.redoButton.addEventListener("click", () => {
+    redo();
+    closeMoreMenu();
+  });
   els.fitButton.addEventListener("click", fitToGraph);
-  els.centerButton.addEventListener("click", centerSelected);
-  els.settingsButton.addEventListener("click", openSettings);
+  els.centerButton.addEventListener("click", () => {
+    centerSelected();
+    closeMoreMenu();
+  });
+  els.settingsButton.addEventListener("click", () => {
+    openSettings();
+    closeMoreMenu();
+  });
   els.settingsCloseButton.addEventListener("click", closeSettings);
   els.colourSchemeInput.addEventListener("change", () => {
     const scheme = colourSchemes[els.colourSchemeInput.value] || colourSchemes["light-mint"];
@@ -575,7 +615,10 @@ function bindEvents() {
     renderGraph();
     persistState();
   });
-  els.resetButton.addEventListener("click", resetView);
+  els.resetButton.addEventListener("click", () => {
+    resetView();
+    closeMoreMenu();
+  });
 
   els.titleInput.addEventListener("input", () => {
     const selected = getSelectedThought();
@@ -645,6 +688,11 @@ function bindEvents() {
     addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value);
   });
   els.placeThoughtButton.addEventListener("click", placeInboxThought);
+  els.inboxReviewCloseButton.addEventListener("click", closeInboxReview);
+  els.inboxReviewChildButton.addEventListener("click", () => placeInboxReviewThought("parent-of"));
+  els.inboxReviewParentButton.addEventListener("click", () => placeInboxReviewThought("child-of"));
+  els.inboxReviewRelatedButton.addEventListener("click", () => placeInboxReviewThought("related"));
+  els.inboxReviewKeepButton.addEventListener("click", keepInboxReviewThought);
 
   els.deleteButton.addEventListener("click", deleteSelectedThought);
 
@@ -686,6 +734,8 @@ function bindEvents() {
     if (event.key === "Escape") {
       closeContextMenu();
       closeSettings();
+      closeMoreMenu();
+      closeInboxReview();
     }
   });
 }
@@ -702,9 +752,11 @@ function render() {
   renderProjectControls();
   applySettings();
   renderSidebarState();
+  renderMoreMenu();
   renderHistoryControls();
   renderThoughtList();
   renderDetails();
+  renderInboxReview();
   renderGraph();
 }
 
@@ -727,6 +779,9 @@ function getColourSchemeId(theme, background) {
 function renderProjectControls() {
   const currentTemplate = els.templateSelect.value;
   const activeProject = getActiveProject();
+  els.projectControls.classList.toggle("collapsed", !newProjectPanelOpen);
+  els.newProjectPanel.hidden = !newProjectPanelOpen;
+  els.newProjectToggleButton.textContent = newProjectPanelOpen ? "Cancel new project" : "New project";
   els.projectSelect.replaceChildren(
     ...appData.projects.map((project) => {
       const option = document.createElement("option");
@@ -744,6 +799,14 @@ function renderProjectControls() {
     ...templateCatalog.map((template) => optionElement(template.id, template.name)),
   );
   els.templateSelect.value = templateCatalog.some((template) => template.id === currentTemplate) ? currentTemplate : "";
+}
+
+function toggleNewProjectPanel() {
+  newProjectPanelOpen = !newProjectPanelOpen;
+  renderProjectControls();
+  if (newProjectPanelOpen) {
+    requestAnimationFrame(() => els.newProjectNameInput.focus());
+  }
 }
 
 function switchProject() {
@@ -772,6 +835,7 @@ function createProjectFromSelectedTemplate() {
   state = clone(project.state);
   els.templateSelect.value = "";
   els.newProjectNameInput.value = "";
+  newProjectPanelOpen = false;
   resetProjectSessionState();
   render();
   requestAnimationFrame(fitToGraph);
@@ -968,8 +1032,9 @@ function renderGraph() {
   );
 
   const positions = getVisualPositions();
-  const activeIds = new Set(getFocusFamilyIds(state.selectedId));
-  const previewId = hoverThoughtId && hoverThoughtId !== state.selectedId ? hoverThoughtId : null;
+  const graphFocusId = getGraphFocusId();
+  const activeIds = new Set(getFocusFamilyIds(graphFocusId));
+  const previewId = hoverThoughtId && hoverThoughtId !== graphFocusId ? hoverThoughtId : null;
   const previewIds = new Set(getPreviewFamilyIds(previewId));
   const linkElements = state.links
     .map((link) => {
@@ -1034,12 +1099,12 @@ function renderGraph() {
     .map((item) => item.element);
   els.linksLayer.replaceChildren(...linkElements);
 
-  const nodeElements = state.thoughts
+  const nodeElements = getGraphThoughts()
     .map((thought) => {
       const position = positions.get(thought.id) || thought;
-      const isActive = thought.id === state.selectedId;
+      const isActive = thought.id === graphFocusId;
       const isConnected = activeIds.has(thought.id) && !isActive;
-      const isDimmed = state.selectedId && !activeIds.has(thought.id);
+      const isDimmed = graphFocusId && !activeIds.has(thought.id);
       const isPreview = thought.id === previewId;
       const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
       const box = getNodeBox(thought.id);
@@ -1182,7 +1247,7 @@ function trimPointToBox(center, target, box, extraGap = 0) {
   };
 }
 
-function addThought(title, anchorId = state.selectedId, relation = "parent-of") {
+function addThought(title, anchorId = state.selectedId, relation = "parent-of", options = {}) {
   pushHistory();
   const selected = getThought(anchorId);
   const connectedCount = selected ? getConnectedThoughts(selected.id).length : 0;
@@ -1208,7 +1273,16 @@ function addThought(title, anchorId = state.selectedId, relation = "parent-of") 
       state.links.push({ id: makeId("l"), from, to, type: "parent" });
     }
   }
-  selectThought(thought.id);
+  if (options.select === false) {
+    renderThoughtList();
+    renderDetails();
+    renderGraph();
+    persistState();
+    return thought;
+  }
+
+  selectThought(thought.id, { center: options.center });
+  return thought;
 }
 
 function addLink(activeId, targetId, relation = "parent-of") {
@@ -1257,6 +1331,15 @@ function deleteSelectedThought() {
 }
 
 function selectThought(id, options = {}) {
+  if (id && isInboxThought(id)) {
+    state.selectedId = id;
+    renderThoughtList();
+    renderDetails();
+    renderGraph();
+    persistState();
+    return;
+  }
+
   const fromPositions = getVisualPositions();
   state.selectedId = id;
   if (options.center !== false) {
@@ -1546,7 +1629,7 @@ function getLinkDirectionText(link) {
 
 function getConnectionRoleLabel(role) {
   if (role === "related") return "Related";
-  return role === "parent" ? "Parent of this" : "Child of this";
+  return role === "parent" ? "Parent" : "Child";
 }
 
 function getParentThoughts(id) {
@@ -1693,6 +1776,14 @@ function getConnectedThoughts(id) {
   return getConnections(id).map((connection) => connection.thought);
 }
 
+function getGraphThoughts() {
+  return state.thoughts.filter((thought) => !isInboxThought(thought.id));
+}
+
+function getGraphFocusId() {
+  return state.selectedId && !isInboxThought(state.selectedId) ? state.selectedId : null;
+}
+
 function getInboxThoughts() {
   return state.thoughts.filter((thought) => isInboxThought(thought.id));
 }
@@ -1723,6 +1814,64 @@ function optionElement(value, text) {
   return option;
 }
 
+function openInboxReview() {
+  inboxReviewOpen = true;
+  inboxReviewIndex = clamp(inboxReviewIndex, 0, Math.max(getInboxThoughts().length - 1, 0));
+  renderInboxReview();
+}
+
+function closeInboxReview() {
+  if (!inboxReviewOpen) return;
+  inboxReviewOpen = false;
+  renderInboxReview();
+}
+
+function getCurrentInboxReviewThought() {
+  const inboxThoughts = getInboxThoughts();
+  if (!inboxThoughts.length) return null;
+  inboxReviewIndex = clamp(inboxReviewIndex, 0, inboxThoughts.length - 1);
+  return inboxThoughts[inboxReviewIndex];
+}
+
+function renderInboxReview() {
+  els.inboxReviewPanel.hidden = !inboxReviewOpen;
+  if (!inboxReviewOpen) return;
+
+  const inboxThoughts = getInboxThoughts();
+  const current = getCurrentInboxReviewThought();
+  const candidates = state.thoughts.filter((thought) => thought.id !== current?.id);
+  els.inboxReviewProgress.textContent = inboxThoughts.length
+    ? `${inboxReviewIndex + 1} of ${inboxThoughts.length} unplaced thoughts`
+    : "No unplaced thoughts.";
+  els.inboxReviewTitle.textContent = current?.title || "Inbox clear";
+  els.inboxReviewNote.textContent = current?.note?.trim() || "Captured thoughts will appear here until you connect them.";
+  els.inboxReviewTargetInput.replaceChildren(
+    ...candidates.map((thought) => optionElement(thought.id, thought.title)),
+  );
+  const disabled = !current || !candidates.length;
+  [els.inboxReviewTargetInput, els.inboxReviewChildButton, els.inboxReviewParentButton, els.inboxReviewRelatedButton].forEach((element) => {
+    element.disabled = disabled;
+  });
+}
+
+function placeInboxReviewThought(relation) {
+  const current = getCurrentInboxReviewThought();
+  const targetId = els.inboxReviewTargetInput.value;
+  if (!current || !targetId) return;
+  selectThought(current.id, { center: false });
+  addLink(current.id, targetId, relation);
+  inboxReviewIndex = Math.min(inboxReviewIndex, Math.max(getInboxThoughts().length - 1, 0));
+  render();
+  setStatus("Thought placed");
+}
+
+function keepInboxReviewThought() {
+  const inboxThoughts = getInboxThoughts();
+  if (!inboxThoughts.length) return;
+  inboxReviewIndex = (inboxReviewIndex + 1) % inboxThoughts.length;
+  renderInboxReview();
+}
+
 function focusQuickCapture() {
   if (sidebarHidden) {
     sidebarHidden = false;
@@ -1749,9 +1898,8 @@ function onQuickCaptureSubmit(event) {
   event.preventDefault();
   const title = els.quickCaptureInput.value.trim();
   if (!title) return;
-  addThought(title, null);
+  addThought(title, null, "parent-of", { select: false });
   els.quickCaptureInput.value = "";
-  showInboxOnly = true;
   render();
   setStatus("Captured to inbox");
 }
@@ -1881,10 +2029,11 @@ function fitToGraph() {
 }
 
 function getFitView() {
-  if (!state.thoughts.length) return null;
+  const graphThoughts = getGraphThoughts();
+  if (!graphThoughts.length) return null;
   const padding = 170;
-  const xs = state.thoughts.map((thought) => thought.x);
-  const ys = state.thoughts.map((thought) => thought.y);
+  const xs = graphThoughts.map((thought) => thought.x);
+  const ys = graphThoughts.map((thought) => thought.y);
   const minX = Math.min(...xs) - padding;
   const maxX = Math.max(...xs) + padding;
   const minY = Math.min(...ys) - padding;
@@ -1914,6 +2063,22 @@ function openSettings() {
 
 function closeSettings() {
   els.settingsPage.hidden = true;
+}
+
+function toggleMoreMenu() {
+  moreMenuOpen = !moreMenuOpen;
+  renderMoreMenu();
+}
+
+function closeMoreMenu() {
+  if (!moreMenuOpen) return;
+  moreMenuOpen = false;
+  renderMoreMenu();
+}
+
+function renderMoreMenu() {
+  els.moreMenu.hidden = !moreMenuOpen;
+  els.moreButton.classList.toggle("active", moreMenuOpen);
 }
 
 function toggleSidebar() {
@@ -2034,8 +2199,12 @@ function onNodeCreateSubmit(event) {
 }
 
 function onDocumentPointerDown(event) {
-  if (els.contextMenu.hidden || els.contextMenu.contains(event.target)) return;
-  closeContextMenu();
+  if (!els.contextMenu.hidden && !els.contextMenu.contains(event.target)) {
+    closeContextMenu();
+  }
+  if (moreMenuOpen && !els.moreMenu.contains(event.target) && event.target !== els.moreButton) {
+    closeMoreMenu();
+  }
 }
 
 function onWheel(event) {

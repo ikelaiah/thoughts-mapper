@@ -1,8 +1,16 @@
 # Thoughts Mapper
 
+![Version](https://img.shields.io/badge/version-0.1.0-4c7fb8)
+![Status](https://img.shields.io/badge/status-MVP-2f8f83)
+![Storage](https://img.shields.io/badge/storage-local--first-206b62)
+![Stack](https://img.shields.io/badge/stack-vanilla%20JS-d49436)
+![Build](https://img.shields.io/badge/build-none-8067b3)
+
+**Version:** `0.1.0`
+
 **A calm, visual second brain for people who want connections without complexity.**
 
-Thoughts Mapper is a free, local-first visual thinking app inspired by associative knowledge tools like TheBrain. It helps you capture thoughts, connect them, and move through your ideas without turning your personal knowledge base into a busy database.
+Thoughts Mapper is a free, local-first visual thinking app inspired by associative knowledge tools. It helps you capture thoughts, connect them, and move through your ideas without turning your personal knowledge base into a busy database.
 
 ## 🚀 Quick Start
 

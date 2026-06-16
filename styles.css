@@ -765,6 +765,11 @@ body[data-background="calm"] .map-stage {
   animation: disconnectNodeDim 260ms ease forwards;
 }
 
+.node.deleting {
+  pointer-events: none;
+  animation: deleteNodeFade 260ms ease forwards;
+}
+
 .node.connected {
   filter: saturate(0.95);
 }
@@ -1616,6 +1621,13 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   to {
     opacity: 0.26;
     filter: saturate(0.55);
+  }
+}
+
+@keyframes deleteNodeFade {
+  to {
+    opacity: 0;
+    filter: saturate(0.5);
   }
 }
 

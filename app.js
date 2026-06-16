@@ -1259,8 +1259,8 @@ function renderGraph() {
   ];
   const linkElements = linkRenderItems
     .map(({ link, effect, visualId }) => {
-      const from = getThought(link.from);
-      const to = getThought(link.to);
+      const from = getGraphRenderThought(link.from);
+      const to = getGraphRenderThought(link.to);
       if (!from || !to) return null;
       const fromPos = positions.get(from.id) || from;
       const toPos = positions.get(to.id) || to;
@@ -1270,8 +1270,8 @@ function renderGraph() {
       const isPreviewLink = previewId && previewIds.has(link.from) && previewIds.has(link.to);
       const isAppearing = effect === "appearing";
       const isLeaving = effect === "leaving";
-      const fromNodeBox = getNodeBox(link.from);
-      const toNodeBox = getNodeBox(link.to);
+      const fromNodeBox = getGraphRenderNodeBox(link.from);
+      const toNodeBox = getGraphRenderNodeBox(link.to);
       const endpoints = getTrimmedLinkEndpoints(fromPos, toPos, fromNodeBox, toNodeBox);
       const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink || isSelectedLink ? 0.8 : 0);
       const group = svg("g", {
@@ -1352,19 +1352,20 @@ function renderGraph() {
       const isDimmed = graphFocusId && !activeIds.has(thought.id);
       const isPreview = thought.id === previewId;
       const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
-      const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id);
-      const box = getNodeBox(thought.id);
+      const isDeleting = thoughtEffect?.mode === "deleting";
+      const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id) && !isDeleting;
+      const box = getGraphRenderNodeBox(thought.id);
       const scale = box.scale;
       const nodeWidth = box.baseWidth;
       const nodeHeight = box.baseHeight;
       const showKindLabel = isActive || isConnected || isPreview || isPreviewRelated || state.view.scale >= 1.2;
       const group = svg("g", {
-        class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${
+        class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
           isPreview ? " preview" : ""
         }${isPreviewRelated ? " preview-related" : ""}`,
         transform: `translate(${position.x} ${position.y}) scale(${scale})`,
         "data-id": thought.id,
-        opacity: isSoftDisconnected ? 0.3 : isDimmed && !isPreview && !isPreviewRelated ? 0.36 : 1,
+        opacity: isDeleting ? 1 : isSoftDisconnected ? 0.3 : isDimmed && !isPreview && !isPreviewRelated ? 0.36 : 1,
       });
       group.append(svg("title", {}, `${thought.title} · ${isInboxThought(thought.id) ? "Inbox" : getKindName(thought.kind)}`));
 
@@ -1433,6 +1434,10 @@ function getNodeBox(id) {
     height: baseHeight * scale,
     scale,
   };
+}
+
+function getGraphRenderNodeBox(id) {
+  return graphEffects.dimThoughts.get(id)?.box || getNodeBox(id);
 }
 
 function getTrimmedLinkEndpoints(from, to, fromBox, toBox) {
@@ -1595,20 +1600,45 @@ function removeConnection(linkId) {
   });
 }
 
+function getDeleteFocusTargetId(deletedId) {
+  const parent = getParentThoughts(deletedId)[0];
+  if (parent) return parent.id;
+  const connected = getConnections(deletedId).find((connection) => connection.thought.id !== deletedId);
+  if (connected) return connected.thought.id;
+  return state.thoughts.find((thought) => thought.id !== deletedId)?.id || null;
+}
+
 function deleteSelectedThought() {
   const selected = getSelectedThought();
   if (!selected) return;
   const approved = window.confirm(`Delete "${selected.title}"?`);
   if (!approved) return;
+  const fromPositions = getVisualPositions();
+  const deletedThought = clone(selected);
+  const deletedPosition = fromPositions.get(selected.id) || selected;
+  const deletedBox = getNodeBox(selected.id);
+  const leavingLinks = state.links.filter((link) => link.from === selected.id || link.to === selected.id);
+  const nextSelectedId = getDeleteFocusTargetId(selected.id);
   pushHistory();
   state.thoughts = state.thoughts.filter((thought) => thought.id !== selected.id);
   state.links = state.links.filter((link) => link.from !== selected.id && link.to !== selected.id);
-  state.selectedId = state.thoughts[0]?.id || null;
+  state.selectedId = nextSelectedId;
   selectedLinkId = null;
   contextLinkId = null;
-  focusPositions = null;
-  render();
-  persistState();
+  hoverThoughtId = null;
+  renderThoughtList();
+  renderDetails();
+  renderKindSettings();
+  renderInboxReview();
+  const toPositions = computeFocusPositions(state.selectedId);
+  runGraphTransition({
+    fromPositions,
+    toPositions,
+    toView: getFocusView(state.selectedId, toPositions),
+    leavingLinks,
+    dimThoughts: [{ thought: deletedThought, position: deletedPosition, box: deletedBox, mode: "deleting" }],
+    save: true,
+  });
 }
 
 function selectThought(id, options = {}) {
@@ -1710,6 +1740,7 @@ function runGraphTransition({
   appearingLinkIds = [],
   leavingLinks = [],
   dimThoughtIds = [],
+  dimThoughts = [],
   delay = LINK_DRAW_DURATION,
   save = true,
 }) {
@@ -1721,6 +1752,16 @@ function runGraphTransition({
     link: clone(link),
   }));
   graphEffects.dimThoughts = new Map();
+  dimThoughts.forEach((effect) => {
+    if (!effect?.thought?.id) return;
+    const position = effect.position || fromPositions.get(effect.thought.id) || effect.thought;
+    graphEffects.dimThoughts.set(effect.thought.id, {
+      thought: clone(effect.thought),
+      position: { x: position.x, y: position.y },
+      box: effect.box ? { ...effect.box } : null,
+      mode: effect.mode || "dim",
+    });
+  });
   dimThoughtIds.forEach((id) => {
     const thought = getThought(id);
     if (!thought) return;
@@ -1728,6 +1769,8 @@ function runGraphTransition({
     graphEffects.dimThoughts.set(id, {
       thought: clone(thought),
       position: { x: position.x, y: position.y },
+      box: null,
+      mode: "dim",
     });
   });
   focusPositions = fromPositions;
@@ -2121,6 +2164,10 @@ function getConnectedThoughts(id) {
 
 function getGraphThoughts() {
   return state.thoughts.filter((thought) => !isInboxThought(thought.id));
+}
+
+function getGraphRenderThought(id) {
+  return getThought(id) || graphEffects.dimThoughts.get(id)?.thought || null;
 }
 
 function getGraphRenderThoughts() {

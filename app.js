@@ -2705,8 +2705,10 @@ function updateHoverThought(event) {
 
 function setHoverThought(id) {
   const nextId = id || null;
-  if (hoverThoughtId === nextId) return;
+  const previousPreviewId = hoverThoughtId && hoverThoughtId !== getGraphFocusId() ? hoverThoughtId : null;
+  const nextPreviewId = nextId && nextId !== getGraphFocusId() ? nextId : null;
   hoverThoughtId = nextId;
+  if (previousPreviewId === nextPreviewId) return;
   renderGraph();
 }
 

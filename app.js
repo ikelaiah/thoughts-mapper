@@ -1070,6 +1070,7 @@ function renderThoughtList() {
       dot.style.background = getKindColor(thought.kind);
 
       const text = document.createElement("span");
+      text.className = "thought-row-text";
       const name = document.createElement("span");
       name.className = "thought-name";
       name.textContent = thought.title;

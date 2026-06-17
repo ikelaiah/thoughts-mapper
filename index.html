@@ -15,6 +15,7 @@
             <h1>Thoughts Mapper</h1>
             <p id="saveState">Ready</p>
           </div>
+          <button id="libraryCloseButton" class="mobile-panel-close" type="button" aria-label="Close library">x</button>
         </header>
 
         <div class="project-controls collapsed" id="projectControls" aria-label="Projects">
@@ -93,6 +94,7 @@
             <button id="redoButton" type="button" title="Redo" aria-label="Redo">Redo</button>
             <button id="centerButton" type="button" title="Center thought" aria-label="Center thought">Center thought</button>
             <button id="resetButton" type="button" title="Reset camera to default zoom and origin" aria-label="Reset camera to default zoom and origin">Reset view</button>
+            <button id="settingsMenuButton" class="mobile-menu-only" type="button" title="Open settings" aria-label="Open settings">Settings</button>
           </div>
         </div>
         <svg id="graph" role="img" aria-label="Visual thought graph">
@@ -110,6 +112,12 @@
       </main>
 
       <aside class="right-panel" aria-label="Thought details">
+        <div class="mobile-sheet-bar">
+          <span aria-hidden="true"></span>
+          <strong>Details</strong>
+          <button id="detailsCloseButton" class="mobile-panel-close" type="button" aria-label="Close details">x</button>
+        </div>
+
         <section id="detailsEmpty" class="empty-state">
           <h2>Thought</h2>
           <p>Create or select a thought.</p>
@@ -200,7 +208,16 @@
           <div id="mentionList" class="connection-list"></div>
         </section>
       </aside>
+
+      <button id="mobileScrim" class="mobile-scrim" type="button" aria-label="Close panel" hidden></button>
     </div>
+
+    <form id="mobileCaptureForm" class="mobile-capture" hidden>
+      <input id="mobileCaptureInput" type="text" maxlength="80" placeholder="Capture a thought..." autocomplete="off" />
+      <button type="submit">Add</button>
+      <button id="mobileCaptureCancelButton" class="mobile-capture-close" type="button" aria-label="Close capture">x</button>
+    </form>
+    <button id="mobileCaptureButton" class="mobile-fab" type="button" aria-label="Capture a thought">+</button>
 
     <section id="inboxReviewPanel" class="inbox-review" hidden aria-label="Inbox review">
       <header>
@@ -323,6 +340,13 @@
               <option value="dark-ocean">Dark ocean</option>
             </select>
           </label>
+
+          <section class="settings-section mobile-management-section">
+            <div class="settings-section-header">
+              <h3>Project & data</h3>
+            </div>
+            <div id="mobileManagement" class="mobile-management"></div>
+          </section>
 
           <section class="settings-section kind-settings">
             <div class="settings-section-header">

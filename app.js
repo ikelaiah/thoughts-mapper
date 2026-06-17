@@ -283,10 +283,18 @@ let newProjectPanelOpen = false;
 let moreMenuOpen = false;
 let inboxReviewOpen = false;
 let inboxReviewIndex = 0;
+const mobileLayoutQuery = window.matchMedia("(max-width: 720px)");
+let mobileLibraryOpen = false;
+let mobileDetailsOpen = false;
+let mobileCaptureOpen = false;
+let wasMobileLayout = null;
+let projectControlsHome = null;
+let sidebarActionsHome = null;
 
 const els = {
   appShell: document.querySelector("#appShell"),
   saveState: document.querySelector("#saveState"),
+  libraryCloseButton: document.querySelector("#libraryCloseButton"),
   projectControls: document.querySelector("#projectControls"),
   projectSelect: document.querySelector("#projectSelect"),
   projectNameInput: document.querySelector("#projectNameInput"),
@@ -303,6 +311,7 @@ const els = {
   inboxCount: document.querySelector("#inboxCount"),
   thoughtCount: document.querySelector("#thoughtCount"),
   thoughtList: document.querySelector("#thoughtList"),
+  sidebarActions: document.querySelector(".sidebar-actions"),
   exportButton: document.querySelector("#exportButton"),
   markdownExportButton: document.querySelector("#markdownExportButton"),
   importInput: document.querySelector("#importInput"),
@@ -316,8 +325,10 @@ const els = {
   centerButton: document.querySelector("#centerButton"),
   resetButton: document.querySelector("#resetButton"),
   settingsButton: document.querySelector("#settingsButton"),
+  settingsMenuButton: document.querySelector("#settingsMenuButton"),
   settingsPage: document.querySelector("#settingsPage"),
   settingsCloseButton: document.querySelector("#settingsCloseButton"),
+  mobileManagement: document.querySelector("#mobileManagement"),
   colourSchemeInput: document.querySelector("#colourSchemeInput"),
   lineThicknessInput: document.querySelector("#lineThicknessInput"),
   lineThicknessValue: document.querySelector("#lineThicknessValue"),
@@ -333,6 +344,7 @@ const els = {
   linksLayer: document.querySelector("#linksLayer"),
   nodesLayer: document.querySelector("#nodesLayer"),
   detailsEmpty: document.querySelector("#detailsEmpty"),
+  detailsCloseButton: document.querySelector("#detailsCloseButton"),
   detailsPanel: document.querySelector("#detailsPanel"),
   selectedType: document.querySelector("#selectedType"),
   deleteButton: document.querySelector("#deleteButton"),
@@ -379,6 +391,11 @@ const els = {
   linkRetargetInput: document.querySelector("#linkRetargetInput"),
   linkRetargetRelationInput: document.querySelector("#linkRetargetRelationInput"),
   linkRetargetButton: document.querySelector("#linkRetargetButton"),
+  mobileScrim: document.querySelector("#mobileScrim"),
+  mobileCaptureButton: document.querySelector("#mobileCaptureButton"),
+  mobileCaptureForm: document.querySelector("#mobileCaptureForm"),
+  mobileCaptureInput: document.querySelector("#mobileCaptureInput"),
+  mobileCaptureCancelButton: document.querySelector("#mobileCaptureCancelButton"),
 };
 
 init();
@@ -392,8 +409,10 @@ async function init() {
     appData = sanitizeAppData(loadLocalState() || seedState);
   }
   state = clone(getActiveProject().state);
+  setupResponsiveManagementSlots();
   measureGraph();
   bindEvents();
+  syncResponsiveLayout();
   render();
   requestAnimationFrame(fitToGraph);
 }
@@ -626,16 +645,21 @@ function sanitizeState(nextState) {
 
 function bindEvents() {
   window.addEventListener("resize", () => {
+    syncResponsiveLayout();
     measureGraph();
     renderGraph();
   });
 
+  els.libraryCloseButton.addEventListener("click", closeMobilePanels);
   els.projectSelect.addEventListener("change", switchProject);
   els.projectNameInput.addEventListener("change", renameActiveProject);
   els.newProjectToggleButton.addEventListener("click", toggleNewProjectPanel);
   els.createTemplateButton.addEventListener("click", createProjectFromSelectedTemplate);
   els.searchInput.addEventListener("input", renderThoughtList);
   els.quickCaptureForm.addEventListener("submit", onQuickCaptureSubmit);
+  els.mobileCaptureButton.addEventListener("click", toggleMobileCapture);
+  els.mobileCaptureCancelButton.addEventListener("click", closeMobileCapture);
+  els.mobileCaptureForm.addEventListener("submit", onMobileCaptureSubmit);
   els.tagFilterInput.addEventListener("change", renderThoughtList);
   els.inboxFilterButton.addEventListener("click", () => {
     const inboxThoughts = getInboxThoughts();
@@ -666,6 +690,10 @@ function bindEvents() {
     closeMoreMenu();
   });
   els.settingsButton.addEventListener("click", () => {
+    openSettings();
+    closeMoreMenu();
+  });
+  els.settingsMenuButton.addEventListener("click", () => {
     openSettings();
     closeMoreMenu();
   });
@@ -802,6 +830,8 @@ function bindEvents() {
     addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value);
   });
   els.placeThoughtButton.addEventListener("click", placeInboxThought);
+  els.detailsCloseButton.addEventListener("click", closeMobilePanels);
+  els.mobileScrim.addEventListener("click", closeMobilePanels);
   els.inboxReviewCloseButton.addEventListener("click", closeInboxReview);
   els.inboxReviewChildButton.addEventListener("click", () => placeInboxReviewThought("parent-of"));
   els.inboxReviewParentButton.addEventListener("click", () => placeInboxReviewThought("child-of"));
@@ -854,8 +884,48 @@ function bindEvents() {
       closeSettings();
       closeMoreMenu();
       closeInboxReview();
+      closeMobilePanels();
+      closeMobileCapture();
     }
   });
+}
+
+function setupResponsiveManagementSlots() {
+  projectControlsHome = document.createComment("project-controls-home");
+  els.projectControls.before(projectControlsHome);
+  sidebarActionsHome = document.createComment("sidebar-actions-home");
+  els.sidebarActions.before(sidebarActionsHome);
+}
+
+function isMobileLayout() {
+  return mobileLayoutQuery.matches;
+}
+
+function syncResponsiveLayout() {
+  const mobile = isMobileLayout();
+  if (wasMobileLayout !== mobile) {
+    if (mobile) {
+      mobileLibraryOpen = false;
+      mobileDetailsOpen = false;
+    } else {
+      mobileCaptureOpen = false;
+    }
+    wasMobileLayout = mobile;
+  }
+  moveManagementControls(mobile);
+  renderPanelState();
+  renderMobileCapture();
+}
+
+function moveManagementControls(mobile) {
+  if (!projectControlsHome || !sidebarActionsHome) return;
+  if (mobile) {
+    els.mobileManagement.append(els.projectControls, els.sidebarActions);
+    return;
+  }
+
+  projectControlsHome.after(els.projectControls);
+  sidebarActionsHome.after(els.sidebarActions);
 }
 
 function measureGraph() {
@@ -1649,6 +1719,7 @@ function selectThought(id, options = {}) {
   selectedLinkId = null;
   if (id && isInboxThought(id)) {
     state.selectedId = id;
+    openMobileDetails();
     renderThoughtList();
     renderDetails();
     renderGraph();
@@ -1658,6 +1729,7 @@ function selectThought(id, options = {}) {
 
   const fromPositions = getVisualPositions();
   state.selectedId = id;
+  openMobileDetails();
   if (options.center !== false) {
     const toPositions = computeFocusPositions(id);
     renderThoughtList();
@@ -2449,6 +2521,10 @@ function keepInboxReviewThought() {
 }
 
 function focusQuickCapture() {
+  if (isMobileLayout()) {
+    openMobileCapture();
+    return;
+  }
   if (sidebarHidden) {
     sidebarHidden = false;
     renderPanelState();
@@ -2460,6 +2536,10 @@ function focusQuickCapture() {
 }
 
 function focusSearch() {
+  if (isMobileLayout()) {
+    openMobileLibrary({ focusSearch: true });
+    return;
+  }
   if (sidebarHidden) {
     sidebarHidden = false;
     renderPanelState();
@@ -2468,6 +2548,17 @@ function focusSearch() {
   }
   els.searchInput.focus();
   els.searchInput.select();
+}
+
+function onMobileCaptureSubmit(event) {
+  event.preventDefault();
+  const title = els.mobileCaptureInput.value.trim();
+  if (!title) return;
+  addThought(title, null, "parent-of", { select: false });
+  els.mobileCaptureInput.value = "";
+  closeMobileCapture();
+  render();
+  setStatus("Captured to inbox");
 }
 
 function onQuickCaptureSubmit(event) {
@@ -2634,6 +2725,8 @@ function resetView() {
 }
 
 function openSettings() {
+  closeMobilePanels();
+  closeMobileCapture();
   els.settingsPage.hidden = false;
 }
 
@@ -2658,12 +2751,30 @@ function renderMoreMenu() {
 }
 
 function toggleSidebar() {
+  if (isMobileLayout()) {
+    mobileLibraryOpen = !mobileLibraryOpen;
+    if (mobileLibraryOpen) {
+      mobileDetailsOpen = false;
+      closeMobileCapture();
+    }
+    renderPanelState();
+    return;
+  }
   sidebarHidden = !sidebarHidden;
   renderPanelState();
   refreshGraphAfterPanelChange();
 }
 
 function toggleDetailsPanel() {
+  if (isMobileLayout()) {
+    mobileDetailsOpen = !mobileDetailsOpen;
+    if (mobileDetailsOpen) {
+      mobileLibraryOpen = false;
+      closeMobileCapture();
+    }
+    renderPanelState();
+    return;
+  }
   detailsHidden = !detailsHidden;
   renderPanelState();
   refreshGraphAfterPanelChange();
@@ -2679,14 +2790,97 @@ function refreshGraphAfterPanelChange() {
 }
 
 function renderPanelState() {
-  els.appShell.classList.toggle("sidebar-hidden", sidebarHidden);
-  els.appShell.classList.toggle("details-hidden", detailsHidden);
-  els.sidebarToggleButton.textContent = sidebarHidden ? "Show list" : "Hide list";
-  els.sidebarToggleButton.title = sidebarHidden ? "Show thoughts sidebar" : "Hide thoughts sidebar";
+  const mobile = isMobileLayout();
+  els.appShell.classList.toggle("sidebar-hidden", !mobile && sidebarHidden);
+  els.appShell.classList.toggle("details-hidden", !mobile && detailsHidden);
+  els.appShell.classList.toggle("mobile-library-open", mobile && mobileLibraryOpen);
+  els.appShell.classList.toggle("mobile-details-open", mobile && mobileDetailsOpen);
+  els.mobileScrim.hidden = !(mobile && (mobileLibraryOpen || mobileDetailsOpen));
+
+  if (mobile) {
+    els.sidebarToggleButton.textContent = "☰";
+    els.sidebarToggleButton.title = mobileLibraryOpen ? "Close library" : "Open library";
+    els.detailsToggleButton.textContent = "i";
+    els.detailsToggleButton.title = mobileDetailsOpen ? "Close thought details" : "Open thought details";
+    els.fitButton.textContent = "⛶";
+    els.moreButton.textContent = "⋯";
+  } else {
+    els.sidebarToggleButton.textContent = sidebarHidden ? "Show list" : "Hide list";
+    els.sidebarToggleButton.title = sidebarHidden ? "Show thoughts sidebar" : "Hide thoughts sidebar";
+    els.detailsToggleButton.textContent = detailsHidden ? "Show details" : "Hide details";
+    els.detailsToggleButton.title = detailsHidden ? "Show thought details" : "Hide thought details";
+    els.fitButton.textContent = "Fit";
+    els.settingsButton.textContent = "Settings";
+    els.moreButton.textContent = "More";
+  }
+
   els.sidebarToggleButton.setAttribute("aria-label", els.sidebarToggleButton.title);
-  els.detailsToggleButton.textContent = detailsHidden ? "Show details" : "Hide details";
-  els.detailsToggleButton.title = detailsHidden ? "Show thought details" : "Hide thought details";
+  els.sidebarToggleButton.setAttribute("aria-expanded", String(mobile ? mobileLibraryOpen : !sidebarHidden));
   els.detailsToggleButton.setAttribute("aria-label", els.detailsToggleButton.title);
+  els.detailsToggleButton.setAttribute("aria-expanded", String(mobile ? mobileDetailsOpen : !detailsHidden));
+  els.fitButton.setAttribute("aria-label", "Fit map");
+  els.moreButton.setAttribute("aria-label", "More map tools");
+  renderMobileCapture();
+}
+
+function openMobileLibrary(options = {}) {
+  if (!isMobileLayout()) return;
+  mobileLibraryOpen = true;
+  mobileDetailsOpen = false;
+  closeMobileCapture();
+  renderPanelState();
+  if (options.focusSearch) {
+    requestAnimationFrame(() => {
+      els.searchInput.focus();
+      els.searchInput.select();
+    });
+  }
+}
+
+function openMobileDetails() {
+  if (!isMobileLayout()) return;
+  mobileDetailsOpen = true;
+  mobileLibraryOpen = false;
+  closeMobileCapture();
+  renderPanelState();
+}
+
+function closeMobilePanels() {
+  if (!mobileLibraryOpen && !mobileDetailsOpen) return;
+  mobileLibraryOpen = false;
+  mobileDetailsOpen = false;
+  renderPanelState();
+}
+
+function toggleMobileCapture() {
+  if (!isMobileLayout()) return;
+  if (mobileCaptureOpen) {
+    closeMobileCapture();
+  } else {
+    openMobileCapture();
+  }
+}
+
+function openMobileCapture() {
+  if (!isMobileLayout()) return;
+  mobileCaptureOpen = true;
+  closeMobilePanels();
+  closeSettings();
+  renderMobileCapture();
+  requestAnimationFrame(() => els.mobileCaptureInput.focus());
+}
+
+function closeMobileCapture() {
+  if (!mobileCaptureOpen) return;
+  mobileCaptureOpen = false;
+  renderMobileCapture();
+}
+
+function renderMobileCapture() {
+  const showCapture = isMobileLayout() && mobileCaptureOpen;
+  els.mobileCaptureForm.hidden = !showCapture;
+  els.mobileCaptureButton.classList.toggle("active", showCapture);
+  els.mobileCaptureButton.setAttribute("aria-expanded", String(showCapture));
 }
 
 function onPointerDown(event) {
@@ -2955,6 +3149,14 @@ function onDocumentPointerDown(event) {
   }
   if (moreMenuOpen && !els.moreMenu.contains(event.target) && event.target !== els.moreButton) {
     closeMoreMenu();
+  }
+  if (
+    mobileCaptureOpen &&
+    isMobileLayout() &&
+    !els.mobileCaptureForm.contains(event.target) &&
+    event.target !== els.mobileCaptureButton
+  ) {
+    closeMobileCapture();
   }
 }
 

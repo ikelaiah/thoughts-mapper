@@ -1,503 +1,56 @@
-const DB_NAME = "thoughts-mapper";
-const DB_VERSION = 1;
-const STORE_NAME = "documents";
-const DOC_KEY = "main";
-const APP_DATA_VERSION = 3;
-const HISTORY_LIMIT = 60;
-const NEW_KIND_VALUE = "__new-kind__";
-const DEFAULT_KIND_ID = "thought";
-const LINK_DRAW_DURATION = 260;
-
-type KindDefinition = {
-  id: string;
-  name: string;
-  color: string;
-};
-
-type Thought = {
-  id: string;
-  title: string;
-  kind: string;
-  note: string;
-  tags: string[];
-  x: number;
-  y: number;
-};
-
-type LinkType = "parent" | "related";
-
-type Link = {
-  id: string;
-  from: string;
-  to: string;
-  type: LinkType;
-  name?: string;
-};
-
-type ViewState = {
-  x: number;
-  y: number;
-  scale: number;
-};
-
-type MapSettings = {
-  theme: string;
-  background: string;
-  calmMode: boolean;
-  lineThickness: number;
-  connectionType: "straight" | "curve";
-  lineEndpoint: "floating" | "touching";
-};
-
-type ProjectState = {
-  kinds: KindDefinition[];
-  defaultKindId: string;
-  thoughts: Thought[];
-  links: Link[];
-  selectedId: string | null;
-  view: ViewState;
-  settings: MapSettings;
-};
-
-type Project = {
-  id: string;
-  name: string;
-  state: ProjectState;
-  updatedAt?: string;
-};
-
-type AppData = {
-  version: number;
-  activeProjectId: string;
-  projects: Project[];
-};
-
-type TemplateDefinition = {
-  id: string;
-  name: string;
-  root: string;
-  tags: string[];
-  children: [string, string, string][];
-};
-
-type Point = {
-  x: number;
-  y: number;
-};
-
-type NodeBox = {
-  scale: number;
-  baseWidth: number;
-  baseHeight: number;
-  hitBaseWidth: number;
-  hitBaseHeight: number;
-  width: number;
-  height: number;
-};
-
-type LinkRelation = "parent-of" | "child-of" | "related";
-type RetargetRelation = LinkRelation | "sibling";
-type PositionMap = Map<string, Point>;
-type SvgAttrs = Record<string, string | number | boolean>;
-type AddThoughtOptions = { select?: boolean; center?: boolean };
-type SelectThoughtOptions = { center?: boolean };
-type CenterOptions = { save?: boolean };
-type RowOptions = { gap?: number };
-type ColumnOptions = { gap?: number; side?: "left" | "right" };
-type ParentRelatedOptions = { sideGap?: number; gap?: number };
-type CreateKindOptions = { assignToThoughtId?: string };
-type AddKindOptions = { select?: boolean; makeDefault?: boolean };
-type MobileLibraryOptions = { focusSearch?: boolean };
-
-type PointerMode =
-  | { type: "node"; id: string }
-  | { type: "pan" };
-
-type PointerStart = {
-  clientX: number;
-  clientY: number;
-  viewX: number;
-  viewY: number;
-};
-
-type LinkRenderEffect = {
-  id: string;
-  link: Link;
-};
-
-type ThoughtRenderEffect = {
-  thought: Thought;
-  position: Point;
-  box?: NodeBox;
-  mode?: "deleting" | "dim";
-};
-
-type GraphTransitionOptions = {
-  fromPositions: PositionMap;
-  toPositions: PositionMap;
-  toView: ViewState | null;
-  appearingLinkIds?: string[];
-  leavingLinks?: Link[];
-  dimThoughtIds?: string[];
-  dimThoughts?: ThoughtRenderEffect[];
-  delay?: number;
-  save?: boolean;
-};
-
-type AppElements = {
-  appShell: HTMLElement;
-  saveState: HTMLElement;
-  libraryCloseButton: HTMLButtonElement;
-  projectControls: HTMLElement;
-  projectSelect: HTMLSelectElement;
-  projectNameInput: HTMLInputElement;
-  newProjectToggleButton: HTMLButtonElement;
-  newProjectPanel: HTMLElement;
-  templateSelect: HTMLSelectElement;
-  newProjectNameInput: HTMLInputElement;
-  createTemplateButton: HTMLButtonElement;
-  searchInput: HTMLInputElement;
-  quickCaptureForm: HTMLFormElement;
-  quickCaptureInput: HTMLInputElement;
-  tagFilterInput: HTMLSelectElement;
-  inboxFilterButton: HTMLButtonElement;
-  inboxCount: HTMLElement;
-  thoughtCount: HTMLElement;
-  thoughtList: HTMLElement;
-  sidebarActions: HTMLElement;
-  exportButton: HTMLButtonElement;
-  markdownExportButton: HTMLButtonElement;
-  importInput: HTMLInputElement;
-  sidebarToggleButton: HTMLButtonElement;
-  detailsToggleButton: HTMLButtonElement;
-  moreButton: HTMLButtonElement;
-  moreMenu: HTMLElement;
-  undoButton: HTMLButtonElement;
-  redoButton: HTMLButtonElement;
-  fitButton: HTMLButtonElement;
-  centerButton: HTMLButtonElement;
-  resetButton: HTMLButtonElement;
-  settingsButton: HTMLButtonElement;
-  settingsMenuButton: HTMLButtonElement;
-  settingsPage: HTMLElement;
-  settingsCloseButton: HTMLButtonElement;
-  mobileManagement: HTMLElement;
-  colourSchemeInput: HTMLSelectElement;
-  lineThicknessInput: HTMLInputElement;
-  lineThicknessValue: HTMLOutputElement;
-  connectionTypeInput: HTMLSelectElement;
-  lineEndpointInput: HTMLSelectElement;
-  calmModeInput: HTMLInputElement;
-  kindList: HTMLElement;
-  newKindNameInput: HTMLInputElement;
-  newKindColorInput: HTMLInputElement;
-  addKindButton: HTMLButtonElement;
-  graph: SVGSVGElement;
-  graphBackground: SVGRectElement;
-  viewport: SVGGElement;
-  linksLayer: SVGGElement;
-  nodesLayer: SVGGElement;
-  detailsEmpty: HTMLElement;
-  detailsCloseButton: HTMLButtonElement;
-  detailsPanel: HTMLElement;
-  selectedType: HTMLElement;
-  deleteButton: HTMLButtonElement;
-  titleInput: HTMLInputElement;
-  kindInput: HTMLSelectElement;
-  kindColorInput: HTMLInputElement;
-  kindDefaultButton: HTMLButtonElement;
-  tagInput: HTMLInputElement;
-  inboxPlacementPanel: HTMLElement;
-  placeTargetInput: HTMLSelectElement;
-  placeRelationInput: HTMLSelectElement;
-  placeThoughtButton: HTMLButtonElement;
-  noteInput: HTMLTextAreaElement;
-  notePreview: HTMLElement;
-  linkForm: HTMLFormElement;
-  linkTargetInput: HTMLSelectElement;
-  linkRelationInput: HTMLSelectElement;
-  connectionCount: HTMLElement;
-  connectionList: HTMLElement;
-  backlinkCount: HTMLElement;
-  backlinkList: HTMLElement;
-  mentionCount: HTMLElement;
-  mentionList: HTMLElement;
-  inboxReviewPanel: HTMLElement;
-  inboxReviewProgress: HTMLElement;
-  inboxReviewCloseButton: HTMLButtonElement;
-  inboxReviewTitle: HTMLElement;
-  inboxReviewNote: HTMLElement;
-  inboxReviewTargetInput: HTMLSelectElement;
-  inboxReviewChildButton: HTMLButtonElement;
-  inboxReviewParentButton: HTMLButtonElement;
-  inboxReviewRelatedButton: HTMLButtonElement;
-  inboxReviewKeepButton: HTMLButtonElement;
-  contextMenu: HTMLElement;
-  nodeCreateForm: HTMLFormElement;
-  nodeCreateInput: HTMLInputElement;
-  nodeCreateRelationInput: HTMLSelectElement;
-  nodeCreateCancelButton: HTMLButtonElement;
-  linkEditForm: HTMLFormElement;
-  linkNameInput: HTMLInputElement;
-  linkDirectionInput: HTMLSelectElement;
-  linkUnlinkButton: HTMLButtonElement;
-  linkKeepInput: HTMLSelectElement;
-  linkRetargetInput: HTMLSelectElement;
-  linkRetargetRelationInput: HTMLSelectElement;
-  linkRetargetButton: HTMLButtonElement;
-  mobileScrim: HTMLButtonElement;
-  mobileCaptureButton: HTMLButtonElement;
-  mobileCaptureForm: HTMLFormElement;
-  mobileCaptureInput: HTMLInputElement;
-  mobileCaptureCancelButton: HTMLButtonElement;
-};
-
-const defaultKindDefinitions: KindDefinition[] = [
-  { id: "thought", name: "Thought", color: "#4c7fb8" },
-  { id: "idea", name: "Idea", color: "#2f8f83" },
-  { id: "project", name: "Project", color: "#4c7fb8" },
-  { id: "person", name: "Person", color: "#d49436" },
-  { id: "resource", name: "Resource", color: "#8067b3" },
-  { id: "question", name: "Question", color: "#c85f6d" },
-];
-
-const legacyKindStyles = Object.fromEntries(defaultKindDefinitions.map((kind) => [kind.id, kind.color]));
-
-const kindColourPalette = [
-  "#4c7fb8",
-  "#2f8f83",
-  "#d49436",
-  "#8067b3",
-  "#c85f6d",
-  "#5f8f46",
-  "#4f9ca4",
-  "#b06f43",
-];
-
-const colourSchemes = {
-  "light-mint": { theme: "light", background: "pastel-mint" },
-  "light-sky": { theme: "light", background: "pastel-sky" },
-  "light-blush": { theme: "light", background: "pastel-blush" },
-  "light-leaves": { theme: "light", background: "leaves" },
-  "light-rain": { theme: "light", background: "rain" },
-  "light-snow": { theme: "light", background: "snow" },
-  "light-ocean": { theme: "light", background: "ocean" },
-  "dark-calm": { theme: "dark", background: "calm" },
-  "dark-mint": { theme: "dark", background: "pastel-mint" },
-  "dark-sky": { theme: "dark", background: "pastel-sky" },
-  "dark-blush": { theme: "dark", background: "pastel-blush" },
-  "dark-fire": { theme: "dark", background: "fireflies" },
-  "dark-leaves": { theme: "dark", background: "leaves" },
-  "dark-blackhole": { theme: "dark", background: "blackhole" },
-  "dark-aurora": { theme: "dark", background: "aurora" },
-  "dark-rain": { theme: "dark", background: "rain" },
-  "dark-snow": { theme: "dark", background: "snow" },
-  "dark-nebula": { theme: "dark", background: "nebula" },
-  "dark-starfield": { theme: "dark", background: "starfield" },
-  "dark-ocean": { theme: "dark", background: "ocean" },
-};
-
-const seedState: ProjectState = {
-  kinds: defaultKindDefinitions,
-  defaultKindId: DEFAULT_KIND_ID,
-  thoughts: [
-    {
-      id: "t-home",
-      title: "Thoughts Mapper",
-      kind: "project",
-      note: "A free, local-first visual thinking space.",
-      tags: ["home"],
-      x: 0,
-      y: 0,
-    },
-    {
-      id: "t-local",
-      title: "Local database",
-      kind: "idea",
-      note: "IndexedDB keeps the map in this browser.",
-      tags: ["local-first"],
-      x: -260,
-      y: -140,
-    },
-    {
-      id: "t-ui",
-      title: "Easy UI",
-      kind: "idea",
-      note: "Add, search, connect, and write without friction.",
-      tags: ["ux"],
-      x: 260,
-      y: -120,
-    },
-    {
-      id: "t-notes",
-      title: "Notes",
-      kind: "resource",
-      note: "Each thought has a focused writing area.",
-      tags: ["notes"],
-      x: -210,
-      y: 160,
-    },
-    {
-      id: "t-next",
-      title: "Later features",
-      kind: "question",
-      note: "Files, web sync, tags, AI search, sharing, and backups.",
-      tags: ["roadmap"],
-      x: 240,
-      y: 160,
-    },
-  ],
-  links: [
-    { id: "l-1", from: "t-home", to: "t-local", type: "parent" },
-    { id: "l-2", from: "t-home", to: "t-ui", type: "parent" },
-    { id: "l-3", from: "t-home", to: "t-notes", type: "parent" },
-    { id: "l-4", from: "t-home", to: "t-next", type: "parent" },
-  ],
-  selectedId: "t-home",
-  view: { x: 0, y: 0, scale: 1 },
-  settings: {
-    theme: "dark",
-    background: "calm",
-    calmMode: true,
-    lineThickness: 1.5,
-    connectionType: "curve",
-    lineEndpoint: "floating",
-  },
-};
-
-const templateCatalog: TemplateDefinition[] = [
-  {
-    id: "project-tracker",
-    name: "Project tracker",
-    root: "Project tracker",
-    tags: ["project"],
-    children: [
-      ["Goals", "question", "What does done look like?\n- [ ] Define outcome\n- [ ] Define success measure"],
-      ["Milestones", "project", "- [ ] Plan first milestone\n- [ ] Review risks"],
-      ["Next actions", "idea", "- [ ] Add next action\n- [ ] Assign owner"],
-      ["Risks", "question", "Track open risks and decisions."],
-      ["Resources", "resource", "Links, notes, references, and files to gather."],
-    ],
-  },
-  {
-    id: "helpdesk-knowledge-base",
-    name: "Helpdesk ticket knowledge base",
-    root: "Helpdesk knowledge base",
-    tags: ["support"],
-    children: [
-      ["Common tickets", "question", "Recurring issues and known fixes."],
-      ["Troubleshooting steps", "resource", "- [ ] Reproduce\n- [ ] Check logs\n- [ ] Confirm resolution"],
-      ["Escalation paths", "person", "Who to contact when the fix needs help."],
-      ["Known workarounds", "idea", "Temporary fixes that users can apply safely."],
-      ["Customer patterns", "idea", "Signals that point to repeat problems."],
-    ],
-  },
-  {
-    id: "bible-study-prep",
-    name: "Bible study prep",
-    root: "Bible study prep",
-    tags: ["study"],
-    children: [
-      ["Passage", "resource", "Primary text, translation notes, and cross references."],
-      ["Observations", "idea", "What does the text say?"],
-      ["Interpretation", "question", "What does it mean in context?"],
-      ["Application", "idea", "How should this shape belief, action, or prayer?"],
-      ["Discussion questions", "question", "- [ ] Opening question\n- [ ] Main question\n- [ ] Reflection question"],
-    ],
-  },
-  {
-    id: "sermon-devotional-outline",
-    name: "Sermon/devotional outline",
-    root: "Sermon outline",
-    tags: ["outline"],
-    children: [
-      ["Big idea", "idea", "The single sentence people should remember."],
-      ["Scripture", "resource", "Main text and supporting passages."],
-      ["Outline", "project", "- [ ] Introduction\n- [ ] Point one\n- [ ] Point two\n- [ ] Close"],
-      ["Illustrations", "resource", "Stories, examples, and images."],
-      ["Response", "question", "What should listeners do next?"],
-    ],
-  },
-  {
-    id: "research-notes",
-    name: "Research notes",
-    root: "Research notes",
-    tags: ["research"],
-    children: [
-      ["Research question", "question", "What are you trying to understand?"],
-      ["Sources", "resource", "Books, papers, pages, interviews, and datasets."],
-      ["Findings", "idea", "Confirmed observations and useful excerpts."],
-      ["Open questions", "question", "What still needs checking?"],
-      ["Synthesis", "idea", "Patterns, conclusions, and next claims to test."],
-    ],
-  },
-  {
-    id: "meeting-notes",
-    name: "Meeting notes",
-    root: "Meeting notes",
-    tags: ["meeting"],
-    children: [
-      ["Agenda", "project", "- [ ] Topic one\n- [ ] Topic two\n- [ ] Topic three"],
-      ["Decisions", "idea", "Decisions made during the meeting."],
-      ["Action items", "project", "- [ ] Action / owner / date"],
-      ["People", "person", "Attendees, stakeholders, and follow-ups."],
-      ["Parking lot", "question", "Important items to revisit later."],
-    ],
-  },
-  {
-    id: "personal-crm",
-    name: "Personal CRM",
-    root: "Personal CRM",
-    tags: ["people"],
-    children: [
-      ["People to follow up", "person", "- [ ] Name / topic / date"],
-      ["Shared interests", "idea", "Topics, projects, and personal details worth remembering."],
-      ["Introductions", "person", "People who should meet each other."],
-      ["Conversation notes", "resource", "Notes from calls, coffees, and messages."],
-      ["Opportunities to help", "question", "Where can you be useful?"],
-    ],
-  },
-  {
-    id: "learning-roadmap",
-    name: "Learning roadmap",
-    root: "Learning roadmap",
-    tags: ["learning"],
-    children: [
-      ["Why learn this", "question", "Purpose, motivation, and desired outcome."],
-      ["Core concepts", "idea", "Ideas that everything else depends on."],
-      ["Practice projects", "project", "- [ ] Small practice\n- [ ] Real-world practice"],
-      ["Resources", "resource", "Courses, books, videos, docs, and mentors."],
-      ["Progress review", "question", "What is clear now? What still feels confusing?"],
-    ],
-  },
-  {
-    id: "book-summary",
-    name: "Book summary",
-    root: "Book summary",
-    tags: ["book"],
-    children: [
-      ["Main argument", "idea", "What is the book really saying?"],
-      ["Key chapters", "resource", "Chapter-by-chapter notes."],
-      ["Quotes", "resource", "Useful short excerpts and page references."],
-      ["Questions", "question", "Claims to test or discuss."],
-      ["Actions", "project", "- [ ] One idea to apply\n- [ ] One idea to share"],
-    ],
-  },
-  {
-    id: "software-architecture-map",
-    name: "Software architecture map",
-    root: "Software architecture",
-    tags: ["software"],
-    children: [
-      ["User flows", "person", "People, roles, and core workflows."],
-      ["Core modules", "project", "Major parts of the system and ownership."],
-      ["Data model", "resource", "Entities, relationships, storage, and migrations."],
-      ["Integrations", "resource", "External APIs, queues, jobs, and services."],
-      ["Risks and tradeoffs", "question", "Constraints, failure modes, and open decisions."],
-    ],
-  },
-];
-
+import {
+  arrangeHorizontalThoughtRow,
+  arrangeVerticalThoughtColumn,
+  easeOutCubic,
+  getNodeBox as calculateNodeBox,
+  interpolate,
+  interpolatePositions,
+} from "./graph-layout";
+import { renderGraphView } from "./graph-render";
+import {
+  APP_DATA_VERSION,
+  DEFAULT_KIND_ID,
+  HISTORY_LIMIT,
+  LINK_DRAW_DURATION,
+  NEW_KIND_VALUE,
+  colourSchemes,
+  defaultKindDefinitions,
+  kindColourPalette,
+  legacyKindStyles,
+  seedState,
+  templateCatalog,
+} from "./constants";
+import { loadIndexedState, loadLocalState, openDatabase, persistIndexedState, persistLocalState } from "./storage";
+import { bindUiEvents } from "./ui-events";
+import type {
+  AddKindOptions,
+  AddThoughtOptions,
+  AppData,
+  AppElements,
+  CenterOptions,
+  CreateKindOptions,
+  GraphEffects,
+  GraphTransitionOptions,
+  Link,
+  LinkRenderEffect,
+  LinkRelation,
+  LinkType,
+  MapSettings,
+  MobileLibraryOptions,
+  NodeBox,
+  ParentRelatedOptions,
+  PointerMode,
+  PointerStart,
+  Point,
+  PositionMap,
+  ProjectState,
+  RetargetRelation,
+  SelectThoughtOptions,
+  SvgAttrs,
+  Thought,
+  ThoughtRenderEffect,
+  ViewState,
+} from "./types";
 let state: ProjectState = clone(seedState);
 let appData: AppData | null = null;
 let db: IDBDatabase | null = null;
@@ -510,7 +63,7 @@ let pointerStart: PointerStart | null = null;
 let focusAnimation: number | null = null;
 let focusPositions: PositionMap | null = null;
 let pendingGraphTransition: number | null = null;
-const graphEffects = {
+const graphEffects: GraphEffects = {
   appearingLinkIds: new Set<string>(),
   leavingLinks: [] as LinkRenderEffect[],
   dimThoughts: new Map<string, ThoughtRenderEffect>(),
@@ -649,7 +202,7 @@ init();
 async function init() {
   try {
     db = await openDatabase();
-    appData = sanitizeAppData((await loadState()) || seedState);
+    appData = sanitizeAppData((await loadIndexedState(db)) || seedState);
   } catch {
     storageMode = "localstorage";
     appData = sanitizeAppData(loadLocalState() || seedState);
@@ -663,39 +216,6 @@ async function init() {
   requestAnimationFrame(fitToGraph);
 }
 
-function openDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (!("indexedDB" in window)) {
-      reject(new Error("IndexedDB unavailable"));
-      return;
-    }
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE_NAME);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function loadState() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const request = tx.objectStore(STORE_NAME).get(DOC_KEY);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-function loadLocalState() {
-  try {
-    const raw = localStorage.getItem(DB_NAME);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
 function persistState() {
   els.saveState.textContent = "Saving";
   clearTimeout(statusTimer);
@@ -703,19 +223,17 @@ function persistState() {
   saveTimer = setTimeout(() => {
     syncActiveProject();
     if (storageMode === "localstorage") {
-      localStorage.setItem(DB_NAME, JSON.stringify(appData));
+      persistLocalState(appData);
       els.saveState.textContent = "Saved";
       return;
     }
 
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    tx.objectStore(STORE_NAME).put(appData, DOC_KEY);
-    tx.oncomplete = () => {
+    if (!db) return;
+    persistIndexedState(db, appData).then(() => {
       els.saveState.textContent = "Saved";
-    };
-    tx.onerror = () => {
+    }).catch(() => {
       els.saveState.textContent = "Save failed";
-    };
+    });
   }, 180);
 }
 
@@ -892,260 +410,240 @@ function sanitizeState(nextState) {
 }
 
 function bindEvents() {
-  window.addEventListener("resize", () => {
-    syncResponsiveLayout();
-    measureGraph();
-    renderGraph();
-  });
-
-  els.libraryCloseButton.addEventListener("click", closeMobilePanels);
-  els.projectSelect.addEventListener("change", switchProject);
-  els.projectNameInput.addEventListener("change", renameActiveProject);
-  els.newProjectToggleButton.addEventListener("click", toggleNewProjectPanel);
-  els.createTemplateButton.addEventListener("click", createProjectFromSelectedTemplate);
-  els.searchInput.addEventListener("input", renderThoughtList);
-  els.quickCaptureForm.addEventListener("submit", onQuickCaptureSubmit);
-  els.mobileCaptureButton.addEventListener("click", toggleMobileCapture);
-  els.mobileCaptureCancelButton.addEventListener("click", closeMobileCapture);
-  els.mobileCaptureForm.addEventListener("submit", onMobileCaptureSubmit);
-  els.tagFilterInput.addEventListener("change", renderThoughtList);
-  els.inboxFilterButton.addEventListener("click", () => {
-    const inboxThoughts = getInboxThoughts();
-    if (inboxThoughts.length) {
-      openInboxReview();
-      return;
-    }
-    showInboxOnly = !showInboxOnly;
-    renderThoughtList();
-  });
-  els.exportButton.addEventListener("click", exportMap);
-  els.markdownExportButton.addEventListener("click", exportMarkdown);
-  els.importInput.addEventListener("change", importMap);
-  els.sidebarToggleButton.addEventListener("click", toggleSidebar);
-  els.detailsToggleButton.addEventListener("click", toggleDetailsPanel);
-  els.moreButton.addEventListener("click", toggleMoreMenu);
-  els.undoButton.addEventListener("click", () => {
-    undo();
-    closeMoreMenu();
-  });
-  els.redoButton.addEventListener("click", () => {
-    redo();
-    closeMoreMenu();
-  });
-  els.fitButton.addEventListener("click", fitToGraph);
-  els.centerButton.addEventListener("click", () => {
-    centerSelected();
-    closeMoreMenu();
-  });
-  els.settingsButton.addEventListener("click", () => {
-    openSettings();
-    closeMoreMenu();
-  });
-  els.settingsMenuButton.addEventListener("click", () => {
-    openSettings();
-    closeMoreMenu();
-  });
-  els.settingsCloseButton.addEventListener("click", closeSettings);
-  els.colourSchemeInput.addEventListener("change", () => {
-    const scheme = colourSchemes[els.colourSchemeInput.value] || colourSchemes["light-mint"];
-    pushHistory();
-    state.settings.theme = scheme.theme;
-    state.settings.background = scheme.background;
-    applySettings();
-    persistState();
-  });
-  els.lineThicknessInput.addEventListener("input", () => {
-    pushHistory();
-    state.settings.lineThickness = Number(els.lineThicknessInput.value);
-    applySettings();
-    renderGraph();
-    persistState();
-  });
-  els.connectionTypeInput.addEventListener("change", () => {
-    pushHistory();
-    state.settings.connectionType = els.connectionTypeInput.value as MapSettings["connectionType"];
-    applySettings();
-    renderGraph();
-    persistState();
-  });
-  els.lineEndpointInput.addEventListener("change", () => {
-    pushHistory();
-    state.settings.lineEndpoint = els.lineEndpointInput.value as MapSettings["lineEndpoint"];
-    applySettings();
-    renderGraph();
-    persistState();
-  });
-  els.calmModeInput.addEventListener("change", () => {
-    pushHistory();
-    state.settings.calmMode = els.calmModeInput.checked;
-    applySettings();
-    focusPositions = computeFocusPositions(state.selectedId);
-    renderGraph();
-    persistState();
-  });
-  els.resetButton.addEventListener("click", () => {
-    resetView();
-    closeMoreMenu();
-  });
-
-  els.titleInput.addEventListener("input", () => {
-    const selected = getSelectedThought();
-    if (!selected) return;
-    pushHistory();
-    selected.title = els.titleInput.value;
-    render();
-    persistState();
-  });
-
-  els.kindInput.addEventListener("change", () => {
-    const selected = getSelectedThought();
-    if (!selected) return;
-    if (els.kindInput.value === NEW_KIND_VALUE) {
-      createKindFromPrompt({ assignToThoughtId: selected.id });
-      return;
-    }
-    pushHistory();
-    selected.kind = els.kindInput.value;
-    render();
-    persistState();
-  });
-
-  els.kindColorInput.addEventListener("change", () => {
-    const selected = getSelectedThought();
-    const kind = selected ? getKindDefinition(selected.kind) : null;
-    if (!kind) return;
-    pushHistory();
-    kind.color = sanitizeKindColor(els.kindColorInput.value, kind.color);
-    render();
-    persistState();
-  });
-
-  els.kindDefaultButton.addEventListener("click", () => {
-    const selected = getSelectedThought();
-    if (!selected || state.defaultKindId === selected.kind) return;
-    pushHistory();
-    state.defaultKindId = selected.kind;
-    render();
-    persistState();
-  });
-
-  els.addKindButton.addEventListener("click", addKindFromSettings);
-  els.newKindNameInput.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    addKindFromSettings();
-  });
-
-  els.tagInput.addEventListener("change", () => {
-    const selected = getSelectedThought();
-    if (!selected) return;
-    pushHistory();
-    selected.tags = normalizeTags(els.tagInput.value);
-    render();
-    persistState();
-  });
-
-  els.noteInput.addEventListener("input", () => {
-    const selected = getSelectedThought();
-    if (!selected) return;
-    pushHistory();
-    selected.note = els.noteInput.value;
-    renderThoughtList();
-    renderMentionPanels(selected);
-    persistState();
-  });
-
-  els.noteInput.addEventListener("blur", () => {
-    showNotePreview(els.noteInput.value);
-  });
-
-  els.notePreview.addEventListener("click", (event) => {
-    const mention = getClosestElement(event.target, "[data-mention-id]");
-    if (mention) {
-      event.stopPropagation();
-      selectThought(mention.dataset.mentionId);
-      return;
-    }
-    startNoteEditing();
-  });
-  els.notePreview.addEventListener("keydown", (event) => {
-    const mention = getClosestElement(event.target, "[data-mention-id]");
-    if (mention && (event.key === "Enter" || event.key === " ")) {
-      event.preventDefault();
-      selectThought(mention.dataset.mentionId);
-      return;
-    }
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      startNoteEditing();
-    }
-  });
-
-  els.linkForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value as LinkRelation);
-  });
-  els.placeThoughtButton.addEventListener("click", placeInboxThought);
-  els.detailsCloseButton.addEventListener("click", closeMobilePanels);
-  els.mobileScrim.addEventListener("click", closeMobilePanels);
-  els.inboxReviewCloseButton.addEventListener("click", closeInboxReview);
-  els.inboxReviewChildButton.addEventListener("click", () => placeInboxReviewThought("parent-of"));
-  els.inboxReviewParentButton.addEventListener("click", () => placeInboxReviewThought("child-of"));
-  els.inboxReviewRelatedButton.addEventListener("click", () => placeInboxReviewThought("related"));
-  els.inboxReviewKeepButton.addEventListener("click", keepInboxReviewThought);
-
-  els.deleteButton.addEventListener("click", deleteSelectedThought);
-
-  els.graph.addEventListener("pointerdown", onPointerDown);
-  els.graph.addEventListener("pointermove", onPointerMove);
-  els.graph.addEventListener("pointerup", onPointerUp);
-  els.graph.addEventListener("pointercancel", onPointerUp);
-  els.graph.addEventListener("pointerleave", clearHoverThought);
-  els.graph.addEventListener("contextmenu", onGraphContextMenu);
-  els.graph.addEventListener("wheel", onWheel, { passive: false });
-  els.nodeCreateForm.addEventListener("submit", onNodeCreateSubmit);
-  els.nodeCreateCancelButton.addEventListener("click", closeContextMenu);
-  els.linkEditForm.addEventListener("submit", onLinkEditSubmit);
-  els.linkUnlinkButton.addEventListener("click", unlinkContextLink);
-  els.linkKeepInput.addEventListener("change", renderLinkRetargetOptions);
-  els.linkRetargetButton.addEventListener("click", retargetContextLink);
-  document.addEventListener("pointerdown", onDocumentPointerDown);
-  window.addEventListener("keydown", (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      focusQuickCapture();
-      return;
-    }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && !isTextEditing(event.target)) {
-      event.preventDefault();
-      focusSearch();
-      return;
-    }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !isTextEditing(event.target)) {
-      event.preventDefault();
-      if (event.shiftKey) {
-        redo();
-      } else {
-        undo();
+  bindUiEvents(els, {
+    onResize: () => {
+      syncResponsiveLayout();
+      measureGraph();
+      renderGraph();
+    },
+    closeMobilePanels,
+    switchProject,
+    renameActiveProject,
+    toggleNewProjectPanel,
+    createProjectFromSelectedTemplate,
+    renderThoughtList,
+    onQuickCaptureSubmit,
+    toggleMobileCapture,
+    closeMobileCapture,
+    onMobileCaptureSubmit,
+    handleInboxFilterClick: () => {
+      const inboxThoughts = getInboxThoughts();
+      if (inboxThoughts.length) {
+        openInboxReview();
+        return;
       }
-      return;
-    }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y" && !isTextEditing(event.target)) {
-      event.preventDefault();
-      redo();
-      return;
-    }
-    if (event.key === "Escape") {
-      closeContextMenu();
-      closeSettings();
+      showInboxOnly = !showInboxOnly;
+      renderThoughtList();
+    },
+    exportMap,
+    exportMarkdown,
+    importMap,
+    toggleSidebar,
+    toggleDetailsPanel,
+    toggleMoreMenu,
+    undoAndCloseMoreMenu: () => {
+      undo();
       closeMoreMenu();
-      closeInboxReview();
-      closeMobilePanels();
-      closeMobileCapture();
-    }
+    },
+    redoAndCloseMoreMenu: () => {
+      redo();
+      closeMoreMenu();
+    },
+    fitToGraph,
+    centerAndCloseMoreMenu: () => {
+      centerSelected();
+      closeMoreMenu();
+    },
+    openSettingsAndCloseMoreMenu: () => {
+      openSettings();
+      closeMoreMenu();
+    },
+    closeSettings,
+    onColourSchemeChange: () => {
+      const scheme = colourSchemes[els.colourSchemeInput.value] || colourSchemes["light-mint"];
+      pushHistory();
+      state.settings.theme = scheme.theme;
+      state.settings.background = scheme.background;
+      applySettings();
+      persistState();
+    },
+    onLineThicknessInput: () => {
+      pushHistory();
+      state.settings.lineThickness = Number(els.lineThicknessInput.value);
+      applySettings();
+      renderGraph();
+      persistState();
+    },
+    onConnectionTypeChange: () => {
+      pushHistory();
+      state.settings.connectionType = els.connectionTypeInput.value as MapSettings["connectionType"];
+      applySettings();
+      renderGraph();
+      persistState();
+    },
+    onLineEndpointChange: () => {
+      pushHistory();
+      state.settings.lineEndpoint = els.lineEndpointInput.value as MapSettings["lineEndpoint"];
+      applySettings();
+      renderGraph();
+      persistState();
+    },
+    onCalmModeChange: () => {
+      pushHistory();
+      state.settings.calmMode = els.calmModeInput.checked;
+      applySettings();
+      focusPositions = computeFocusPositions(state.selectedId);
+      renderGraph();
+      persistState();
+    },
+    resetViewAndCloseMoreMenu: () => {
+      resetView();
+      closeMoreMenu();
+    },
+    onTitleInput: () => {
+      const selected = getSelectedThought();
+      if (!selected) return;
+      pushHistory();
+      selected.title = els.titleInput.value;
+      render();
+      persistState();
+    },
+    onKindChange: () => {
+      const selected = getSelectedThought();
+      if (!selected) return;
+      if (els.kindInput.value === NEW_KIND_VALUE) {
+        createKindFromPrompt({ assignToThoughtId: selected.id });
+        return;
+      }
+      pushHistory();
+      selected.kind = els.kindInput.value;
+      render();
+      persistState();
+    },
+    onKindColorChange: () => {
+      const selected = getSelectedThought();
+      const kind = selected ? getKindDefinition(selected.kind) : null;
+      if (!kind) return;
+      pushHistory();
+      kind.color = sanitizeKindColor(els.kindColorInput.value, kind.color);
+      render();
+      persistState();
+    },
+    onKindDefaultClick: () => {
+      const selected = getSelectedThought();
+      if (!selected || state.defaultKindId === selected.kind) return;
+      pushHistory();
+      state.defaultKindId = selected.kind;
+      render();
+      persistState();
+    },
+    addKindFromSettings,
+    onNewKindNameKeydown: (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addKindFromSettings();
+    },
+    onTagChange: () => {
+      const selected = getSelectedThought();
+      if (!selected) return;
+      pushHistory();
+      selected.tags = normalizeTags(els.tagInput.value);
+      render();
+      persistState();
+    },
+    onNoteInput: () => {
+      const selected = getSelectedThought();
+      if (!selected) return;
+      pushHistory();
+      selected.note = els.noteInput.value;
+      renderThoughtList();
+      renderMentionPanels(selected);
+      persistState();
+    },
+    onNoteBlur: () => {
+      showNotePreview(els.noteInput.value);
+    },
+    onNotePreviewClick: (event) => {
+      const mention = getClosestElement(event.target, "[data-mention-id]");
+      if (mention) {
+        event.stopPropagation();
+        selectThought(mention.dataset.mentionId);
+        return;
+      }
+      startNoteEditing();
+    },
+    onNotePreviewKeydown: (event) => {
+      const mention = getClosestElement(event.target, "[data-mention-id]");
+      if (mention && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        selectThought(mention.dataset.mentionId);
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        startNoteEditing();
+      }
+    },
+    onLinkSubmit: (event) => {
+      event.preventDefault();
+      addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value as LinkRelation);
+    },
+    placeInboxThought,
+    closeInboxReview,
+    placeInboxReviewAsChild: () => placeInboxReviewThought("parent-of"),
+    placeInboxReviewAsParent: () => placeInboxReviewThought("child-of"),
+    placeInboxReviewRelated: () => placeInboxReviewThought("related"),
+    keepInboxReviewThought,
+    deleteSelectedThought,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    clearHoverThought,
+    onGraphContextMenu,
+    onWheel,
+    onNodeCreateSubmit,
+    closeContextMenu,
+    onLinkEditSubmit,
+    unlinkContextLink,
+    renderLinkRetargetOptions,
+    retargetContextLink,
+    onDocumentPointerDown,
+    onKeyDown: (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        focusQuickCapture();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && !isTextEditing(event.target)) {
+        event.preventDefault();
+        focusSearch();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !isTextEditing(event.target)) {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y" && !isTextEditing(event.target)) {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (event.key === "Escape") {
+        closeContextMenu();
+        closeSettings();
+        closeMoreMenu();
+        closeInboxReview();
+        closeMobilePanels();
+        closeMobileCapture();
+      }
+    },
   });
 }
-
 function setupResponsiveManagementSlots() {
   projectControlsHome = document.createComment("project-controls-home");
   els.projectControls.before(projectControlsHome);
@@ -1565,332 +1063,47 @@ function renderKindSettings() {
 }
 
 function renderGraph() {
-  els.viewport.setAttribute(
-    "transform",
-    `translate(${graphRect.width / 2 + state.view.x} ${graphRect.height / 2 + state.view.y}) scale(${state.view.scale})`,
-  );
-
-  const positions = getVisualPositions();
-  const graphFocusId = getGraphFocusId();
-  const directFocusIds = new Set(getDirectFocusFamilyIds(graphFocusId));
-  const secondaryFocusIds = new Set(getSecondaryFocusFamilyIds(graphFocusId));
-  const visibleFocusIds = new Set(getFocusFamilyIds(graphFocusId));
-  const hiddenFocusIds = new Set(isCalmMode() ? secondaryFocusIds : []);
-  const previewId = hoverThoughtId && hoverThoughtId !== graphFocusId ? hoverThoughtId : null;
-  const previewIds = new Set(getPreviewFamilyIds(previewId));
-  const linkRenderItems = [
-    ...state.links.map((link) => ({
-      link,
-      effect: graphEffects.appearingLinkIds.has(link.id) ? "appearing" : "",
-      visualId: link.id,
-    })),
-    ...graphEffects.leavingLinks.map((effect) => ({
-      link: effect.link,
-      effect: "leaving",
-      visualId: effect.id,
-    })),
-  ];
-  const linkElements = linkRenderItems
-    .map(({ link, effect, visualId }) => {
-      const from = getGraphRenderThought(link.from);
-      const to = getGraphRenderThought(link.to);
-      if (!from || !to) return null;
-      if (hiddenFocusIds.has(link.from) || hiddenFocusIds.has(link.to)) return null;
-      const fromPos = positions.get(from.id) || from;
-      const toPos = positions.get(to.id) || to;
-      const isActiveLink = link.from === state.selectedId || link.to === state.selectedId;
-      const isSelectedLink = link.id === selectedLinkId;
-      const isFocusLink = visibleFocusIds.has(link.from) && visibleFocusIds.has(link.to);
-      const isPreviewLink = previewId && previewIds.has(link.from) && previewIds.has(link.to);
-      const isAppearing = effect === "appearing";
-      const isLeaving = effect === "leaving";
-      const fromNodeBox = getGraphRenderNodeBox(link.from);
-      const toNodeBox = getGraphRenderNodeBox(link.to);
-      const endpoints = getTrimmedLinkEndpoints(fromPos, toPos, fromNodeBox, toNodeBox);
-      const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink || isSelectedLink ? 0.8 : 0);
-      const group = svg("g", {
-        class: `link-group${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${isLeaving ? " leaving" : ""}${
-          isFocusLink && !isActiveLink ? " context" : ""
-        }${
-          state.selectedId && !isFocusLink && !isSelectedLink && !isLeaving ? " dimmed" : ""
-        }`,
-        "data-link-id": visualId,
-      });
-      group.append(svg("title", {}, `${from.title} ${getLinkDirectionText(link)} ${to.title}`));
-      const linkAttrs: SvgAttrs = {
-        class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${
-          isFocusLink && !isActiveLink ? " context" : ""
-        }`,
-        style: `stroke-width: ${thickness}px`,
-      };
-      if (isAppearing) linkAttrs.pathLength = 1;
-      const hitAttrs: SvgAttrs = {
-        class: "link-hit",
-        "data-link-id": visualId,
-      };
-      const linkElement =
-        state.settings.connectionType === "curve"
-          ? svg("path", {
-              ...linkAttrs,
-              d: getCurvePath(endpoints.from, endpoints.to),
-            })
-          : svg("line", {
-              ...linkAttrs,
-              x1: endpoints.from.x,
-              y1: endpoints.from.y,
-              x2: endpoints.to.x,
-              y2: endpoints.to.y,
-            });
-      const hitElement =
-        state.settings.connectionType === "curve"
-          ? svg("path", {
-              ...hitAttrs,
-              d: getCurvePath(endpoints.from, endpoints.to),
-            })
-          : svg("line", {
-              ...hitAttrs,
-              x1: endpoints.from.x,
-              y1: endpoints.from.y,
-              x2: endpoints.to.x,
-              y2: endpoints.to.y,
-            });
-      group.append(hitElement);
-      group.append(linkElement);
-
-      if (!isLeaving && (isActiveLink || isSelectedLink || link.name)) {
-        const label = svg(
-          "text",
-          {
-            class: `relation-label${isActiveLink || isSelectedLink ? " active" : ""}`,
-            x: (fromPos.x + toPos.x) / 2,
-            y: (fromPos.y + toPos.y) / 2 - 8,
-          },
-          link.name || getLinkLabel(link),
-        );
-        group.append(label);
-      }
-      const priority = isLeaving ? 1 : isSelectedLink ? 5 : isAppearing ? 4 : isActiveLink ? 3 : isPreviewLink ? 2 : isFocusLink ? 1 : 0;
-      return { element: group, priority };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.priority - b.priority)
-    .map((item) => item.element);
-  els.linksLayer.replaceChildren(...linkElements);
-
-  const nodeElements = getGraphRenderThoughts()
-    .map((thought) => {
-      if (hiddenFocusIds.has(thought.id)) return null;
-      const thoughtEffect = graphEffects.dimThoughts.get(thought.id);
-      const position = thoughtEffect?.position || positions.get(thought.id) || thought;
-      const isActive = thought.id === graphFocusId;
-      const isConnected = directFocusIds.has(thought.id) && !isActive;
-      const isSecondaryFocus = secondaryFocusIds.has(thought.id);
-      const isDimmed = graphFocusId && (!directFocusIds.has(thought.id) || isSecondaryFocus);
-      const isPreview = thought.id === previewId;
-      const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
-      const isDeleting = thoughtEffect?.mode === "deleting";
-      const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id) && !isDeleting;
-      const box = getGraphRenderNodeBox(thought.id);
-      const scale = box.scale;
-      const nodeWidth = box.baseWidth;
-      const nodeHeight = box.baseHeight;
-      const nodeHitWidth = box.hitBaseWidth;
-      const nodeHitHeight = box.hitBaseHeight;
-      const showKindLabel = isActive || isConnected || isPreview || isPreviewRelated || state.view.scale >= 1.2;
-      const titleY = isMobileLayout() && showKindLabel ? -5 : showKindLabel ? -2 : 5;
-      const kindY = isMobileLayout() ? 14 : 16;
-      const nodeRadius = isActive ? 14 : 18;
-      const titleText = trimLabel(thought.title, isActive ? 18 : 13);
-      const ribbonWidth = isActive ? 6 : 5;
-      const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
-      const ribbonX = -nodeWidth / 2 + 13;
-      const group = svg("g", {
-        class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
-          isPreview ? " preview" : ""
-        }${isPreviewRelated ? " preview-related" : ""}`,
-        transform: `translate(${position.x} ${position.y}) scale(${scale})`,
-        "data-id": thought.id,
-        opacity: isDeleting ? 1 : isSoftDisconnected ? 0.3 : isDimmed && !isPreview && !isPreviewRelated ? 0.36 : 1,
-      });
-      group.append(svg("title", {}, `${thought.title} · ${isInboxThought(thought.id) ? "Inbox" : getKindName(thought.kind)}`));
-
-      if (isActive) {
-        group.append(
-          svg("circle", { class: "node-orbit orbit-one", r: 58 }),
-          svg("circle", { class: "node-orbit orbit-two", r: 72 }),
-        );
-      }
-
-      group.append(
-        svg("rect", {
-          class: "node-hit",
-          x: -nodeHitWidth / 2,
-          y: -nodeHitHeight / 2,
-          width: nodeHitWidth,
-          height: nodeHitHeight,
-          rx: 22,
-          ry: 22,
-        }),
-      );
-      group.append(
-        svg("rect", {
-          class: "node-shell",
-          x: -nodeWidth / 2,
-          y: -nodeHeight / 2,
-          width: nodeWidth,
-          height: nodeHeight,
-          rx: nodeRadius,
-          ry: nodeRadius,
-        }),
-      );
-      group.append(
-        svg("rect", {
-          class: "node-ribbon",
-          x: ribbonX,
-          y: -ribbonHeight / 2,
-          width: ribbonWidth,
-          height: ribbonHeight,
-          rx: ribbonWidth / 2,
-          ry: ribbonWidth / 2,
-          fill: getKindColor(thought.kind),
-        }),
-      );
-      const textElements = [
-        svg("text", { class: "node-title", y: titleY }, titleText),
-      ];
-      if (showKindLabel) {
-        textElements.push(svg("text", { class: "node-kind", y: kindY }, isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind)));
-      }
-      group.append(...textElements);
-      const priority = isActive ? 4 : isPreview ? 3 : isConnected || isPreviewRelated ? 2 : isDimmed ? 0 : 1;
-      return { element: group, priority };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.priority - b.priority)
-    .map((item) => item.element);
-  els.nodesLayer.replaceChildren(...nodeElements);
-}
-
-function getCurvePath(from, to) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const distance = Math.hypot(dx, dy) || 1;
-  const bend = clamp(distance * 0.08, 18, 56);
-  const direction = dx >= 0 ? 1 : -1;
-  const verticalBias = Math.abs(dy) > Math.abs(dx) ? 0.18 : 0.08;
-  const c1 = {
-    x: from.x + dx * 0.38 + direction * bend,
-    y: from.y + dy * verticalBias,
-  };
-  const c2 = {
-    x: from.x + dx * 0.62 - direction * bend,
-    y: to.y - dy * verticalBias,
-  };
-  return `M ${from.x} ${from.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.x} ${to.y}`;
-}
-
-function getNodeBox(id) {
-  const isActive = id === state.selectedId;
-  const connected = state.selectedId && getConnectedThoughts(state.selectedId).some((thought) => thought.id === id);
-  const mobile = isMobileLayout();
-  const thought = getThought(id);
-  const scale = mobile ? (isActive ? 1 : connected ? 0.9 : 0.82) : isActive ? 1.04 : connected ? 0.92 : 0.82;
-  const baseWidth = getContentNodeWidth(thought, {
-    min: mobile ? (isActive ? 120 : connected ? 112 : 104) : isActive ? 132 : connected ? 118 : 108,
-    max: mobile ? (isActive ? 170 : connected ? 150 : 140) : isActive ? 180 : connected ? 180 : 160,
-    titleLimit: isActive ? 18 : 13,
+  renderGraphView({
+    state,
+    els,
+    graphRect,
+    graphEffects,
+    hoverThoughtId,
+    selectedLinkId,
+    getVisualPositions,
+    getGraphFocusId,
+    getDirectFocusFamilyIds,
+    getSecondaryFocusFamilyIds,
+    getFocusFamilyIds,
+    getPreviewFamilyIds,
+    getGraphRenderThought,
+    getGraphRenderThoughts,
+    getGraphRenderNodeBox,
+    getLinkDirectionText,
+    getLinkLabel,
+    getKindName,
+    getKindColor,
+    isCalmMode,
+    isMobileLayout,
+    isInboxThought,
+    trimLabel,
+    svg,
   });
-  const baseHeight = mobile ? (isActive ? 54 : connected ? 56 : 52) : isActive ? 58 : connected ? 58 : 54;
-  const hitBaseWidth = mobile ? Math.max(baseWidth + 28, 72 / scale) : baseWidth;
-  const hitBaseHeight = mobile ? Math.max(baseHeight + 22, 56 / scale) : baseHeight;
-  return {
-    baseWidth,
-    baseHeight,
-    hitBaseWidth,
-    hitBaseHeight,
-    width: baseWidth * scale,
-    height: baseHeight * scale,
-    scale,
-  };
 }
-
-function getContentNodeWidth(thought, { min, max, titleLimit }) {
-  if (!thought) return min;
-  const title = trimLabel(thought.title, titleLimit);
-  const kind = isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind);
-  const titleWidth = estimateNodeTitleWidth(title);
-  const kindWidth = kind.length * 6.3;
-  return Math.round(clamp(Math.max(titleWidth, kindWidth) + 34, min, max));
-}
-
-function estimateNodeTitleWidth(title) {
-  return String(title || "").length * 8.4;
+function getNodeBox(id) {
+  return calculateNodeBox({
+    id,
+    selectedId: state.selectedId,
+    thought: getThought(id),
+    isConnected: Boolean(state.selectedId && getConnectedThoughts(state.selectedId).some((thought) => thought.id === id)),
+    mobile: isMobileLayout(),
+    isInboxThought,
+    getKindName,
+  });
 }
 
 function getGraphRenderNodeBox(id) {
   return graphEffects.dimThoughts.get(id)?.box || getNodeBox(id);
-}
-
-function getTrimmedLinkEndpoints(from, to, fromBox, toBox) {
-  const baseFrom = trimPointToBox(from, to, fromBox, 0);
-  const baseTo = trimPointToBox(to, from, toBox, 0);
-  if (state.settings.lineEndpoint === "touching") {
-    return { from: baseFrom, to: baseTo };
-  }
-
-  const dx = baseTo.x - baseFrom.x;
-  const dy = baseTo.y - baseFrom.y;
-  const length = Math.hypot(dx, dy);
-  if (length <= 1) {
-    return getMinimalLinkEndpoints(from, to);
-  }
-
-  const visibleLength = Math.max(28, length * 0.58);
-  const totalGap = Math.max(0, length - visibleLength);
-  const gapPerSide = Math.min(30, totalGap / 2);
-  const unitX = dx / length;
-  const unitY = dy / length;
-  return {
-    from: {
-      x: baseFrom.x + unitX * gapPerSide,
-      y: baseFrom.y + unitY * gapPerSide,
-    },
-    to: {
-      x: baseTo.x - unitX * gapPerSide,
-      y: baseTo.y - unitY * gapPerSide,
-    },
-  };
-}
-
-function getMinimalLinkEndpoints(from, to) {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const length = Math.hypot(dx, dy) || 1;
-  const unitX = dx / length;
-  const unitY = dy / length;
-  const size = state.settings.lineEndpoint === "floating" ? 28 : 12;
-  const center = {
-    x: (from.x + to.x) / 2,
-    y: (from.y + to.y) / 2,
-  };
-  return {
-    from: { x: center.x - unitX * size * 0.5, y: center.y - unitY * size * 0.5 },
-    to: { x: center.x + unitX * size * 0.5, y: center.y + unitY * size * 0.5 },
-  };
-}
-
-function trimPointToBox(center, target, box, extraGap = 0) {
-  const dx = target.x - center.x;
-  const dy = target.y - center.y;
-  if (dx === 0 && dy === 0) return center;
-  const edgeInset = state.settings.lineEndpoint === "touching" ? -0.5 : state.settings.lineThickness;
-  const halfWidth = box.width / 2 + edgeInset + extraGap;
-  const halfHeight = box.height / 2 + edgeInset + extraGap;
-  const scale = Math.min(Math.abs(halfWidth / dx) || Infinity, Math.abs(halfHeight / dy) || Infinity);
-  return {
-    x: center.x + dx * scale,
-    y: center.y + dy * scale,
-  };
 }
 
 function addThought(title: string, anchorId = state.selectedId, relation: LinkRelation = "parent-of", options: AddThoughtOptions = {}) {
@@ -2228,7 +1441,7 @@ function animateCamera({
   focusAnimation = requestAnimationFrame(function tick(now) {
     const progress = clamp((now - start) / duration, 0, 1);
     const eased = easeOutCubic(progress);
-    focusPositions = interpolatePositions(fromPositions, toPositions, eased);
+    focusPositions = interpolatePositions(state.thoughts, fromPositions, toPositions, eased);
     state.view = {
       x: interpolate(fromView.x, toView.x, eased),
       y: interpolate(fromView.y, toView.y, eased),
@@ -2255,19 +1468,6 @@ function stopFocusAnimation() {
   }
 }
 
-function interpolatePositions(fromPositions, toPositions, progress) {
-  const positions = new Map();
-  state.thoughts.forEach((thought) => {
-    const from = fromPositions.get(thought.id) || thought;
-    const to = toPositions.get(thought.id) || thought;
-    positions.set(thought.id, {
-      x: interpolate(from.x, to.x, progress),
-      y: interpolate(from.y, to.y, progress),
-    });
-  });
-  return positions;
-}
-
 function computeFocusPositions(selectedId = state.selectedId) {
   const positions = new Map(state.thoughts.map((thought) => [thought.id, { x: thought.x, y: thought.y }]));
   const selected = getThought(selectedId);
@@ -2292,26 +1492,26 @@ function computeFocusPositions(selectedId = state.selectedId) {
   const rowGap = isMobileLayout() ? 24 : 34;
   positions.set(selected.id, { x: selected.x, y: selected.y });
 
-  arrangeHorizontalThoughtRow(positions, parents, selected.x, selected.y - verticalGap, { gap: rowGap });
-  arrangeVerticalThoughtColumn(positions, related, selected.x - selectedBox.width / 2 - sideGap, selected.y, {
+  arrangeHorizontalThoughtRow(positions, parents, selected.x, selected.y - verticalGap, getNodeBox, { gap: rowGap });
+  arrangeVerticalThoughtColumn(positions, related, selected.x - selectedBox.width / 2 - sideGap, selected.y, getNodeBox, {
     gap: rowGap,
     side: "left",
   });
-  arrangeVerticalThoughtColumn(positions, siblings, selected.x + selectedBox.width / 2 + sideGap, selected.y, {
+  arrangeVerticalThoughtColumn(positions, siblings, selected.x + selectedBox.width / 2 + sideGap, selected.y, getNodeBox, {
     gap: rowGap,
     side: "right",
   });
-  arrangeHorizontalThoughtRow(positions, children, selected.x, selected.y + verticalGap, { gap: rowGap });
+  arrangeHorizontalThoughtRow(positions, children, selected.x, selected.y + verticalGap, getNodeBox, { gap: rowGap });
 
   if (!isCalmMode()) {
     arrangeParentRelatedContext(positions, parentRelated, {
       gap: rowGap,
       sideGap: Math.max(44, sideGap * 0.72),
     });
-    arrangeHorizontalThoughtRow(positions, uniqueThoughts(secondAncestors), selected.x, selected.y - verticalGap - secondaryGap, {
+    arrangeHorizontalThoughtRow(positions, uniqueThoughts(secondAncestors), selected.x, selected.y - verticalGap - secondaryGap, getNodeBox, {
       gap: rowGap,
     });
-    arrangeHorizontalThoughtRow(positions, uniqueThoughts(secondDescendants), selected.x, selected.y + verticalGap + secondaryGap, {
+    arrangeHorizontalThoughtRow(positions, uniqueThoughts(secondDescendants), selected.x, selected.y + verticalGap + secondaryGap, getNodeBox, {
       gap: rowGap,
     });
   }
@@ -2320,36 +1520,6 @@ function computeFocusPositions(selectedId = state.selectedId) {
     positions.set(selected.id, { x: selected.x, y: selected.y });
   }
   return positions;
-}
-
-function arrangeHorizontalThoughtRow(positions: PositionMap, thoughts: Thought[], centerX: number, y: number, options: RowOptions = {}) {
-  if (!thoughts.length) return;
-  const gap = options.gap ?? 34;
-  const ordered = [...thoughts].sort((a, b) => a.x - b.x || a.title.localeCompare(b.title));
-  const widths = ordered.map((thought) => getNodeBox(thought.id).width);
-  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * Math.max(ordered.length - 1, 0);
-  let cursor = centerX - totalWidth / 2;
-  ordered.forEach((thought, index) => {
-    const width = widths[index];
-    positions.set(thought.id, { x: cursor + width / 2, y });
-    cursor += width + gap;
-  });
-}
-
-function arrangeVerticalThoughtColumn(positions: PositionMap, thoughts: Thought[], edgeX: number, centerY: number, options: ColumnOptions = {}) {
-  if (!thoughts.length) return;
-  const gap = options.gap ?? 34;
-  const side = options.side || "left";
-  const ordered = [...thoughts].sort((a, b) => a.y - b.y || a.title.localeCompare(b.title));
-  const boxes = ordered.map((thought) => getNodeBox(thought.id));
-  const totalHeight = boxes.reduce((sum, box) => sum + box.height, 0) + gap * Math.max(ordered.length - 1, 0);
-  let cursor = centerY - totalHeight / 2;
-  ordered.forEach((thought, index) => {
-    const box = boxes[index];
-    const x = side === "left" ? edgeX - box.width / 2 : edgeX + box.width / 2;
-    positions.set(thought.id, { x, y: cursor + box.height / 2 });
-    cursor += box.height + gap;
-  });
 }
 
 function arrangeParentRelatedContext(positions: PositionMap, entries: { parentId: string; thought: Thought }[], options: ParentRelatedOptions = {}) {
@@ -2365,7 +1535,7 @@ function arrangeParentRelatedContext(positions: PositionMap, entries: { parentId
     const parentPosition = positions.get(parentId) || parent;
     if (!parent || !parentPosition) return;
     const parentBox = getNodeBox(parentId);
-    arrangeVerticalThoughtColumn(positions, uniqueThoughts(thoughts), parentPosition.x - parentBox.width / 2 - (options.sideGap ?? 68), parentPosition.y, {
+    arrangeVerticalThoughtColumn(positions, uniqueThoughts(thoughts), parentPosition.x - parentBox.width / 2 - (options.sideGap ?? 68), parentPosition.y, getNodeBox, {
       gap: options.gap ?? 34,
       side: "left",
     });
@@ -2374,14 +1544,6 @@ function arrangeParentRelatedContext(positions: PositionMap, entries: { parentId
 
 function getVisualPositions() {
   return focusPositions || computeFocusPositions(state.selectedId);
-}
-
-function interpolate(from, to, progress) {
-  return from + (to - from) * progress;
-}
-
-function easeOutCubic(value) {
-  return 1 - Math.pow(1 - value, 3);
 }
 
 function getLinkLabel(link) {

@@ -115,7 +115,7 @@ const seedState = {
     theme: "dark",
     background: "calm",
     calmMode: true,
-    lineThickness: 2.5,
+    lineThickness: 1.5,
     connectionType: "curve",
     lineEndpoint: "floating",
   },
@@ -613,8 +613,8 @@ function sanitizeState(nextState) {
     ].includes(previousSettings.background)
       ? previousSettings.background
       : "calm",
-    calmMode: typeof previousSettings.calmMode === "boolean" ? previousSettings.calmMode : previousSettings.background === "calm",
-    lineThickness: clamp(Number(previousSettings.lineThickness) || 2.5, 1, 8),
+    calmMode: typeof previousSettings.calmMode === "boolean" ? previousSettings.calmMode : true,
+    lineThickness: clamp(Number(previousSettings.lineThickness) || 1.5, 1, 8),
     connectionType: ["straight", "curve"].includes(previousSettings.connectionType)
       ? previousSettings.connectionType
       : "curve",

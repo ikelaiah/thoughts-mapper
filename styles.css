@@ -2102,6 +2102,15 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   accent-color: var(--accent);
 }
 
+.field-hint {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 1.35;
+  text-transform: none;
+}
+
 .field-notes {
   min-height: 0;
 }

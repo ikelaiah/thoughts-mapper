@@ -3,8 +3,8 @@
 ![Version](https://img.shields.io/badge/version-0.1.0-4c7fb8)
 ![Status](https://img.shields.io/badge/status-MVP-2f8f83)
 ![Storage](https://img.shields.io/badge/storage-local--first-206b62)
-![Stack](https://img.shields.io/badge/stack-vanilla%20JS-d49436)
-![Build](https://img.shields.io/badge/build-none-8067b3)
+![Stack](https://img.shields.io/badge/stack-TypeScript%20%2B%20Vite-d49436)
+![Build](https://img.shields.io/badge/build-vite-8067b3)
 
 **Version:** `0.1.0`
 
@@ -14,9 +14,14 @@ Thoughts Mapper is a free, local-first visual thinking app inspired by associati
 
 ## 🚀 Quick Start
 
-Open `index.html` in a modern browser.
+Install dependencies and start the Vite dev server:
 
-No install step, build step, account, or server is required. Your data is saved in this browser using IndexedDB, with a localStorage fallback.
+```sh
+npm install
+npm run dev
+```
+
+Then open the local URL printed by Vite. Your data is saved in this browser using IndexedDB, with a localStorage fallback.
 
 ## 🧭 First 5 Minutes
 
@@ -64,7 +69,7 @@ The UI is designed to make the graph feel stable instead of jumpy:
 - New and reconnected links draw from source to target
 - Removed links fade out before the layout settles
 - Disconnected nodes briefly dim so the change is understandable
-- Kind color appears as a small dot instead of overwhelming the node
+- Kind color appears as a slim ribbon instead of overwhelming the node
 - Kind labels stay quiet and appear mainly when selected, connected, previewed, or zoomed in
 
 Use **Settings** to adjust:
@@ -72,6 +77,7 @@ Use **Settings** to adjust:
 - Line thickness
 - Straight or curved connections
 - Floating or touching line endpoints
+- Calm mode for hiding second-degree context
 - Light/dark color schemes
 - Background presets
 - Kind names, colors, order, deletion, and default kind
@@ -109,7 +115,8 @@ Thoughts Mapper runs locally in your browser. There is no sync backend, account 
 
 - `index.html` — app markup and controls
 - `styles.css` — visual design, layout, themes, and animations
-- `app.js` — state, persistence, graph rendering, interactions, notes, import/export, and kind management
+- `src/main.ts` — state, persistence, graph rendering, interactions, notes, import/export, and kind management
+- `package.json`, `tsconfig.json`, `vite.config.ts` — TypeScript and Vite tooling
 
 ## 🧩 Good Next Features
 

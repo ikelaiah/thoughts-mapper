@@ -1,3 +1,4 @@
+// @ts-nocheck
 const DB_NAME = "thoughts-mapper";
 const DB_VERSION = 1;
 const STORE_NAME = "documents";

@@ -812,6 +812,12 @@ body[data-background="calm"] .map-stage {
   filter: saturate(0.95);
 }
 
+.node-hit {
+  fill: transparent;
+  stroke: transparent;
+  pointer-events: all;
+}
+
 .node-shell {
   fill: var(--node-fill);
   stroke: var(--node-stroke);
@@ -823,9 +829,16 @@ body[data-background="calm"] .map-stage {
     stroke-width 180ms ease;
 }
 
+.node-ribbon {
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    width 180ms ease;
+}
+
 .node.active .node-shell {
   stroke: var(--accent);
-  stroke-width: 3;
+  stroke-width: 2.2;
 }
 
 .node.preview,
@@ -2951,8 +2964,7 @@ input[type="range"] {
     padding: 0;
   }
 
-  .relation-label,
-  .node-kind {
+  .relation-label {
     display: none;
   }
 

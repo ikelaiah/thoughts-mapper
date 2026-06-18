@@ -1431,7 +1431,16 @@ function renderGraph() {
       const scale = box.scale;
       const nodeWidth = box.baseWidth;
       const nodeHeight = box.baseHeight;
+      const nodeHitWidth = box.hitBaseWidth;
+      const nodeHitHeight = box.hitBaseHeight;
       const showKindLabel = isActive || isConnected || isPreview || isPreviewRelated || state.view.scale >= 1.2;
+      const titleY = isMobileLayout() && showKindLabel ? -5 : showKindLabel ? -2 : 5;
+      const kindY = isMobileLayout() ? 14 : 16;
+      const nodeRadius = isActive ? 14 : 18;
+      const titleText = trimLabel(thought.title, isActive ? 18 : 13);
+      const ribbonWidth = isActive ? 6 : 5;
+      const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
+      const ribbonX = -nodeWidth / 2 + 13;
       const group = svg("g", {
         class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
           isPreview ? " preview" : ""
@@ -1451,21 +1460,43 @@ function renderGraph() {
 
       group.append(
         svg("rect", {
+          class: "node-hit",
+          x: -nodeHitWidth / 2,
+          y: -nodeHitHeight / 2,
+          width: nodeHitWidth,
+          height: nodeHitHeight,
+          rx: 22,
+          ry: 22,
+        }),
+      );
+      group.append(
+        svg("rect", {
           class: "node-shell",
           x: -nodeWidth / 2,
           y: -nodeHeight / 2,
           width: nodeWidth,
           height: nodeHeight,
-          rx: 18,
-          ry: 18,
+          rx: nodeRadius,
+          ry: nodeRadius,
         }),
       );
-      group.append(svg("circle", { r: 7, cx: -nodeWidth / 2 + 19, cy: -nodeHeight / 2 + 18, fill: getKindColor(thought.kind) }));
+      group.append(
+        svg("rect", {
+          class: "node-ribbon",
+          x: ribbonX,
+          y: -ribbonHeight / 2,
+          width: ribbonWidth,
+          height: ribbonHeight,
+          rx: ribbonWidth / 2,
+          ry: ribbonWidth / 2,
+          fill: getKindColor(thought.kind),
+        }),
+      );
       const textElements = [
-        svg("text", { class: "node-title", y: showKindLabel ? -2 : 5 }, trimLabel(thought.title, isActive ? 18 : 13)),
+        svg("text", { class: "node-title", y: titleY }, titleText),
       ];
       if (showKindLabel) {
-        textElements.push(svg("text", { class: "node-kind", y: 19 }, isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind)));
+        textElements.push(svg("text", { class: "node-kind", y: kindY }, isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind)));
       }
       group.append(...textElements);
       const priority = isActive ? 4 : isPreview ? 3 : isConnected || isPreviewRelated ? 2 : isDimmed ? 0 : 1;
@@ -1497,16 +1528,39 @@ function getCurvePath(from, to) {
 function getNodeBox(id) {
   const isActive = id === state.selectedId;
   const connected = state.selectedId && getConnectedThoughts(state.selectedId).some((thought) => thought.id === id);
-  const scale = isActive ? 1.12 : connected ? 0.95 : 0.82;
-  const baseWidth = isActive ? 166 : 140;
-  const baseHeight = isActive ? 76 : 64;
+  const mobile = isMobileLayout();
+  const thought = getThought(id);
+  const scale = mobile ? (isActive ? 1 : connected ? 0.9 : 0.82) : isActive ? 1.04 : connected ? 0.92 : 0.82;
+  const baseWidth = getContentNodeWidth(thought, {
+    min: mobile ? (isActive ? 120 : connected ? 112 : 104) : isActive ? 132 : connected ? 118 : 108,
+    max: mobile ? (isActive ? 170 : connected ? 150 : 140) : isActive ? 180 : connected ? 180 : 160,
+    titleLimit: isActive ? 18 : 13,
+  });
+  const baseHeight = mobile ? (isActive ? 54 : connected ? 56 : 52) : isActive ? 58 : connected ? 58 : 54;
+  const hitBaseWidth = mobile ? Math.max(baseWidth + 28, 72 / scale) : baseWidth;
+  const hitBaseHeight = mobile ? Math.max(baseHeight + 22, 56 / scale) : baseHeight;
   return {
     baseWidth,
     baseHeight,
+    hitBaseWidth,
+    hitBaseHeight,
     width: baseWidth * scale,
     height: baseHeight * scale,
     scale,
   };
+}
+
+function getContentNodeWidth(thought, { min, max, titleLimit }) {
+  if (!thought) return min;
+  const title = trimLabel(thought.title, titleLimit);
+  const kind = isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind);
+  const titleWidth = estimateNodeTitleWidth(title);
+  const kindWidth = kind.length * 6.3;
+  return Math.round(clamp(Math.max(titleWidth, kindWidth) + 34, min, max));
+}
+
+function estimateNodeTitleWidth(title) {
+  return String(title || "").length * 8.4;
 }
 
 function getGraphRenderNodeBox(id) {

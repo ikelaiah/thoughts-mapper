@@ -1,4 +1,3 @@
-// @ts-nocheck
 const DB_NAME = "thoughts-mapper";
 const DB_VERSION = 1;
 const STORE_NAME = "documents";
@@ -9,7 +8,251 @@ const NEW_KIND_VALUE = "__new-kind__";
 const DEFAULT_KIND_ID = "thought";
 const LINK_DRAW_DURATION = 260;
 
-const defaultKindDefinitions = [
+type KindDefinition = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+type Thought = {
+  id: string;
+  title: string;
+  kind: string;
+  note: string;
+  tags: string[];
+  x: number;
+  y: number;
+};
+
+type LinkType = "parent" | "related";
+
+type Link = {
+  id: string;
+  from: string;
+  to: string;
+  type: LinkType;
+  name?: string;
+};
+
+type ViewState = {
+  x: number;
+  y: number;
+  scale: number;
+};
+
+type MapSettings = {
+  theme: string;
+  background: string;
+  calmMode: boolean;
+  lineThickness: number;
+  connectionType: "straight" | "curve";
+  lineEndpoint: "floating" | "touching";
+};
+
+type ProjectState = {
+  kinds: KindDefinition[];
+  defaultKindId: string;
+  thoughts: Thought[];
+  links: Link[];
+  selectedId: string | null;
+  view: ViewState;
+  settings: MapSettings;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  state: ProjectState;
+  updatedAt?: string;
+};
+
+type AppData = {
+  version: number;
+  activeProjectId: string;
+  projects: Project[];
+};
+
+type TemplateDefinition = {
+  id: string;
+  name: string;
+  root: string;
+  tags: string[];
+  children: [string, string, string][];
+};
+
+type Point = {
+  x: number;
+  y: number;
+};
+
+type NodeBox = {
+  scale: number;
+  baseWidth: number;
+  baseHeight: number;
+  hitBaseWidth: number;
+  hitBaseHeight: number;
+  width: number;
+  height: number;
+};
+
+type LinkRelation = "parent-of" | "child-of" | "related";
+type RetargetRelation = LinkRelation | "sibling";
+type PositionMap = Map<string, Point>;
+type SvgAttrs = Record<string, string | number | boolean>;
+type AddThoughtOptions = { select?: boolean; center?: boolean };
+type SelectThoughtOptions = { center?: boolean };
+type CenterOptions = { save?: boolean };
+type RowOptions = { gap?: number };
+type ColumnOptions = { gap?: number; side?: "left" | "right" };
+type ParentRelatedOptions = { sideGap?: number; gap?: number };
+type CreateKindOptions = { assignToThoughtId?: string };
+type AddKindOptions = { select?: boolean; makeDefault?: boolean };
+type MobileLibraryOptions = { focusSearch?: boolean };
+
+type PointerMode =
+  | { type: "node"; id: string }
+  | { type: "pan" };
+
+type PointerStart = {
+  clientX: number;
+  clientY: number;
+  viewX: number;
+  viewY: number;
+};
+
+type LinkRenderEffect = {
+  id: string;
+  link: Link;
+};
+
+type ThoughtRenderEffect = {
+  thought: Thought;
+  position: Point;
+  box?: NodeBox;
+  mode?: "deleting" | "dim";
+};
+
+type GraphTransitionOptions = {
+  fromPositions: PositionMap;
+  toPositions: PositionMap;
+  toView: ViewState | null;
+  appearingLinkIds?: string[];
+  leavingLinks?: Link[];
+  dimThoughtIds?: string[];
+  dimThoughts?: ThoughtRenderEffect[];
+  delay?: number;
+  save?: boolean;
+};
+
+type AppElements = {
+  appShell: HTMLElement;
+  saveState: HTMLElement;
+  libraryCloseButton: HTMLButtonElement;
+  projectControls: HTMLElement;
+  projectSelect: HTMLSelectElement;
+  projectNameInput: HTMLInputElement;
+  newProjectToggleButton: HTMLButtonElement;
+  newProjectPanel: HTMLElement;
+  templateSelect: HTMLSelectElement;
+  newProjectNameInput: HTMLInputElement;
+  createTemplateButton: HTMLButtonElement;
+  searchInput: HTMLInputElement;
+  quickCaptureForm: HTMLFormElement;
+  quickCaptureInput: HTMLInputElement;
+  tagFilterInput: HTMLSelectElement;
+  inboxFilterButton: HTMLButtonElement;
+  inboxCount: HTMLElement;
+  thoughtCount: HTMLElement;
+  thoughtList: HTMLElement;
+  sidebarActions: HTMLElement;
+  exportButton: HTMLButtonElement;
+  markdownExportButton: HTMLButtonElement;
+  importInput: HTMLInputElement;
+  sidebarToggleButton: HTMLButtonElement;
+  detailsToggleButton: HTMLButtonElement;
+  moreButton: HTMLButtonElement;
+  moreMenu: HTMLElement;
+  undoButton: HTMLButtonElement;
+  redoButton: HTMLButtonElement;
+  fitButton: HTMLButtonElement;
+  centerButton: HTMLButtonElement;
+  resetButton: HTMLButtonElement;
+  settingsButton: HTMLButtonElement;
+  settingsMenuButton: HTMLButtonElement;
+  settingsPage: HTMLElement;
+  settingsCloseButton: HTMLButtonElement;
+  mobileManagement: HTMLElement;
+  colourSchemeInput: HTMLSelectElement;
+  lineThicknessInput: HTMLInputElement;
+  lineThicknessValue: HTMLOutputElement;
+  connectionTypeInput: HTMLSelectElement;
+  lineEndpointInput: HTMLSelectElement;
+  calmModeInput: HTMLInputElement;
+  kindList: HTMLElement;
+  newKindNameInput: HTMLInputElement;
+  newKindColorInput: HTMLInputElement;
+  addKindButton: HTMLButtonElement;
+  graph: SVGSVGElement;
+  graphBackground: SVGRectElement;
+  viewport: SVGGElement;
+  linksLayer: SVGGElement;
+  nodesLayer: SVGGElement;
+  detailsEmpty: HTMLElement;
+  detailsCloseButton: HTMLButtonElement;
+  detailsPanel: HTMLElement;
+  selectedType: HTMLElement;
+  deleteButton: HTMLButtonElement;
+  titleInput: HTMLInputElement;
+  kindInput: HTMLSelectElement;
+  kindColorInput: HTMLInputElement;
+  kindDefaultButton: HTMLButtonElement;
+  tagInput: HTMLInputElement;
+  inboxPlacementPanel: HTMLElement;
+  placeTargetInput: HTMLSelectElement;
+  placeRelationInput: HTMLSelectElement;
+  placeThoughtButton: HTMLButtonElement;
+  noteInput: HTMLTextAreaElement;
+  notePreview: HTMLElement;
+  linkForm: HTMLFormElement;
+  linkTargetInput: HTMLSelectElement;
+  linkRelationInput: HTMLSelectElement;
+  connectionCount: HTMLElement;
+  connectionList: HTMLElement;
+  backlinkCount: HTMLElement;
+  backlinkList: HTMLElement;
+  mentionCount: HTMLElement;
+  mentionList: HTMLElement;
+  inboxReviewPanel: HTMLElement;
+  inboxReviewProgress: HTMLElement;
+  inboxReviewCloseButton: HTMLButtonElement;
+  inboxReviewTitle: HTMLElement;
+  inboxReviewNote: HTMLElement;
+  inboxReviewTargetInput: HTMLSelectElement;
+  inboxReviewChildButton: HTMLButtonElement;
+  inboxReviewParentButton: HTMLButtonElement;
+  inboxReviewRelatedButton: HTMLButtonElement;
+  inboxReviewKeepButton: HTMLButtonElement;
+  contextMenu: HTMLElement;
+  nodeCreateForm: HTMLFormElement;
+  nodeCreateInput: HTMLInputElement;
+  nodeCreateRelationInput: HTMLSelectElement;
+  nodeCreateCancelButton: HTMLButtonElement;
+  linkEditForm: HTMLFormElement;
+  linkNameInput: HTMLInputElement;
+  linkDirectionInput: HTMLSelectElement;
+  linkUnlinkButton: HTMLButtonElement;
+  linkKeepInput: HTMLSelectElement;
+  linkRetargetInput: HTMLSelectElement;
+  linkRetargetRelationInput: HTMLSelectElement;
+  linkRetargetButton: HTMLButtonElement;
+  mobileScrim: HTMLButtonElement;
+  mobileCaptureButton: HTMLButtonElement;
+  mobileCaptureForm: HTMLFormElement;
+  mobileCaptureInput: HTMLInputElement;
+  mobileCaptureCancelButton: HTMLButtonElement;
+};
+
+const defaultKindDefinitions: KindDefinition[] = [
   { id: "thought", name: "Thought", color: "#4c7fb8" },
   { id: "idea", name: "Idea", color: "#2f8f83" },
   { id: "project", name: "Project", color: "#4c7fb8" },
@@ -54,7 +297,7 @@ const colourSchemes = {
   "dark-ocean": { theme: "dark", background: "ocean" },
 };
 
-const seedState = {
+const seedState: ProjectState = {
   kinds: defaultKindDefinitions,
   defaultKindId: DEFAULT_KIND_ID,
   thoughts: [
@@ -122,7 +365,7 @@ const seedState = {
   },
 };
 
-const templateCatalog = [
+const templateCatalog: TemplateDefinition[] = [
   {
     id: "project-tracker",
     name: "Project tracker",
@@ -255,29 +498,29 @@ const templateCatalog = [
   },
 ];
 
-let state = clone(seedState);
-let appData = null;
-let db;
+let state: ProjectState = clone(seedState);
+let appData: AppData | null = null;
+let db: IDBDatabase | null = null;
 let storageMode = "indexeddb";
-let saveTimer;
-let statusTimer;
+let saveTimer: number | undefined;
+let statusTimer: number | undefined;
 let graphRect = { width: 1, height: 1 };
-let pointerMode = null;
-let pointerStart = null;
-let focusAnimation = null;
-let focusPositions = null;
-let pendingGraphTransition = null;
+let pointerMode: PointerMode | null = null;
+let pointerStart: PointerStart | null = null;
+let focusAnimation: number | null = null;
+let focusPositions: PositionMap | null = null;
+let pendingGraphTransition: number | null = null;
 const graphEffects = {
-  appearingLinkIds: new Set(),
-  leavingLinks: [],
-  dimThoughts: new Map(),
+  appearingLinkIds: new Set<string>(),
+  leavingLinks: [] as LinkRenderEffect[],
+  dimThoughts: new Map<string, ThoughtRenderEffect>(),
 };
-let contextAnchorId = null;
-let contextLinkId = null;
-let hoverThoughtId = null;
-let selectedLinkId = null;
-let undoStack = [];
-let redoStack = [];
+let contextAnchorId: string | null = null;
+let contextLinkId: string | null = null;
+let hoverThoughtId: string | null = null;
+let selectedLinkId: string | null = null;
+let undoStack: string[] = [];
+let redoStack: string[] = [];
 let showInboxOnly = false;
 let sidebarHidden = false;
 let detailsHidden = false;
@@ -289,116 +532,116 @@ const mobileLayoutQuery = window.matchMedia("(max-width: 720px)");
 let mobileLibraryOpen = false;
 let mobileDetailsOpen = false;
 let mobileCaptureOpen = false;
-let wasMobileLayout = null;
-let projectControlsHome = null;
-let sidebarActionsHome = null;
+let wasMobileLayout: boolean | null = null;
+let projectControlsHome: Comment | null = null;
+let sidebarActionsHome: Comment | null = null;
 
-const els = {
-  appShell: document.querySelector("#appShell"),
-  saveState: document.querySelector("#saveState"),
-  libraryCloseButton: document.querySelector("#libraryCloseButton"),
-  projectControls: document.querySelector("#projectControls"),
-  projectSelect: document.querySelector("#projectSelect"),
-  projectNameInput: document.querySelector("#projectNameInput"),
-  newProjectToggleButton: document.querySelector("#newProjectToggleButton"),
-  newProjectPanel: document.querySelector("#newProjectPanel"),
-  templateSelect: document.querySelector("#templateSelect"),
-  newProjectNameInput: document.querySelector("#newProjectNameInput"),
-  createTemplateButton: document.querySelector("#createTemplateButton"),
-  searchInput: document.querySelector("#searchInput"),
-  quickCaptureForm: document.querySelector("#quickCaptureForm"),
-  quickCaptureInput: document.querySelector("#quickCaptureInput"),
-  tagFilterInput: document.querySelector("#tagFilterInput"),
-  inboxFilterButton: document.querySelector("#inboxFilterButton"),
-  inboxCount: document.querySelector("#inboxCount"),
-  thoughtCount: document.querySelector("#thoughtCount"),
-  thoughtList: document.querySelector("#thoughtList"),
-  sidebarActions: document.querySelector(".sidebar-actions"),
-  exportButton: document.querySelector("#exportButton"),
-  markdownExportButton: document.querySelector("#markdownExportButton"),
-  importInput: document.querySelector("#importInput"),
-  sidebarToggleButton: document.querySelector("#sidebarToggleButton"),
-  detailsToggleButton: document.querySelector("#detailsToggleButton"),
-  moreButton: document.querySelector("#moreButton"),
-  moreMenu: document.querySelector("#moreMenu"),
-  undoButton: document.querySelector("#undoButton"),
-  redoButton: document.querySelector("#redoButton"),
-  fitButton: document.querySelector("#fitButton"),
-  centerButton: document.querySelector("#centerButton"),
-  resetButton: document.querySelector("#resetButton"),
-  settingsButton: document.querySelector("#settingsButton"),
-  settingsMenuButton: document.querySelector("#settingsMenuButton"),
-  settingsPage: document.querySelector("#settingsPage"),
-  settingsCloseButton: document.querySelector("#settingsCloseButton"),
-  mobileManagement: document.querySelector("#mobileManagement"),
-  colourSchemeInput: document.querySelector("#colourSchemeInput"),
-  lineThicknessInput: document.querySelector("#lineThicknessInput"),
-  lineThicknessValue: document.querySelector("#lineThicknessValue"),
-  connectionTypeInput: document.querySelector("#connectionTypeInput"),
-  lineEndpointInput: document.querySelector("#lineEndpointInput"),
-  calmModeInput: document.querySelector("#calmModeInput"),
-  kindList: document.querySelector("#kindList"),
-  newKindNameInput: document.querySelector("#newKindNameInput"),
-  newKindColorInput: document.querySelector("#newKindColorInput"),
-  addKindButton: document.querySelector("#addKindButton"),
-  graph: document.querySelector("#graph"),
-  graphBackground: document.querySelector("#graphBackground"),
-  viewport: document.querySelector("#viewport"),
-  linksLayer: document.querySelector("#linksLayer"),
-  nodesLayer: document.querySelector("#nodesLayer"),
-  detailsEmpty: document.querySelector("#detailsEmpty"),
-  detailsCloseButton: document.querySelector("#detailsCloseButton"),
-  detailsPanel: document.querySelector("#detailsPanel"),
-  selectedType: document.querySelector("#selectedType"),
-  deleteButton: document.querySelector("#deleteButton"),
-  titleInput: document.querySelector("#titleInput"),
-  kindInput: document.querySelector("#kindInput"),
-  kindColorInput: document.querySelector("#kindColorInput"),
-  kindDefaultButton: document.querySelector("#kindDefaultButton"),
-  tagInput: document.querySelector("#tagInput"),
-  inboxPlacementPanel: document.querySelector("#inboxPlacementPanel"),
-  placeTargetInput: document.querySelector("#placeTargetInput"),
-  placeRelationInput: document.querySelector("#placeRelationInput"),
-  placeThoughtButton: document.querySelector("#placeThoughtButton"),
-  noteInput: document.querySelector("#noteInput"),
-  notePreview: document.querySelector("#notePreview"),
-  linkForm: document.querySelector("#linkForm"),
-  linkTargetInput: document.querySelector("#linkTargetInput"),
-  linkRelationInput: document.querySelector("#linkRelationInput"),
-  connectionCount: document.querySelector("#connectionCount"),
-  connectionList: document.querySelector("#connectionList"),
-  backlinkCount: document.querySelector("#backlinkCount"),
-  backlinkList: document.querySelector("#backlinkList"),
-  mentionCount: document.querySelector("#mentionCount"),
-  mentionList: document.querySelector("#mentionList"),
-  inboxReviewPanel: document.querySelector("#inboxReviewPanel"),
-  inboxReviewProgress: document.querySelector("#inboxReviewProgress"),
-  inboxReviewCloseButton: document.querySelector("#inboxReviewCloseButton"),
-  inboxReviewTitle: document.querySelector("#inboxReviewTitle"),
-  inboxReviewNote: document.querySelector("#inboxReviewNote"),
-  inboxReviewTargetInput: document.querySelector("#inboxReviewTargetInput"),
-  inboxReviewChildButton: document.querySelector("#inboxReviewChildButton"),
-  inboxReviewParentButton: document.querySelector("#inboxReviewParentButton"),
-  inboxReviewRelatedButton: document.querySelector("#inboxReviewRelatedButton"),
-  inboxReviewKeepButton: document.querySelector("#inboxReviewKeepButton"),
-  contextMenu: document.querySelector("#contextMenu"),
-  nodeCreateForm: document.querySelector("#nodeCreateForm"),
-  nodeCreateInput: document.querySelector("#nodeCreateInput"),
-  nodeCreateRelationInput: document.querySelector("#nodeCreateRelationInput"),
-  nodeCreateCancelButton: document.querySelector("#nodeCreateCancelButton"),
-  linkEditForm: document.querySelector("#linkEditForm"),
-  linkNameInput: document.querySelector("#linkNameInput"),
-  linkDirectionInput: document.querySelector("#linkDirectionInput"),
-  linkUnlinkButton: document.querySelector("#linkUnlinkButton"),
-  linkKeepInput: document.querySelector("#linkKeepInput"),
-  linkRetargetInput: document.querySelector("#linkRetargetInput"),
-  linkRetargetRelationInput: document.querySelector("#linkRetargetRelationInput"),
-  linkRetargetButton: document.querySelector("#linkRetargetButton"),
-  mobileScrim: document.querySelector("#mobileScrim"),
-  mobileCaptureButton: document.querySelector("#mobileCaptureButton"),
-  mobileCaptureForm: document.querySelector("#mobileCaptureForm"),
-  mobileCaptureInput: document.querySelector("#mobileCaptureInput"),
-  mobileCaptureCancelButton: document.querySelector("#mobileCaptureCancelButton"),
+const els: AppElements = {
+  appShell: qs("#appShell"),
+  saveState: qs("#saveState"),
+  libraryCloseButton: qs("#libraryCloseButton"),
+  projectControls: qs("#projectControls"),
+  projectSelect: qs("#projectSelect"),
+  projectNameInput: qs("#projectNameInput"),
+  newProjectToggleButton: qs("#newProjectToggleButton"),
+  newProjectPanel: qs("#newProjectPanel"),
+  templateSelect: qs("#templateSelect"),
+  newProjectNameInput: qs("#newProjectNameInput"),
+  createTemplateButton: qs("#createTemplateButton"),
+  searchInput: qs("#searchInput"),
+  quickCaptureForm: qs("#quickCaptureForm"),
+  quickCaptureInput: qs("#quickCaptureInput"),
+  tagFilterInput: qs("#tagFilterInput"),
+  inboxFilterButton: qs("#inboxFilterButton"),
+  inboxCount: qs("#inboxCount"),
+  thoughtCount: qs("#thoughtCount"),
+  thoughtList: qs("#thoughtList"),
+  sidebarActions: qs(".sidebar-actions"),
+  exportButton: qs("#exportButton"),
+  markdownExportButton: qs("#markdownExportButton"),
+  importInput: qs("#importInput"),
+  sidebarToggleButton: qs("#sidebarToggleButton"),
+  detailsToggleButton: qs("#detailsToggleButton"),
+  moreButton: qs("#moreButton"),
+  moreMenu: qs("#moreMenu"),
+  undoButton: qs("#undoButton"),
+  redoButton: qs("#redoButton"),
+  fitButton: qs("#fitButton"),
+  centerButton: qs("#centerButton"),
+  resetButton: qs("#resetButton"),
+  settingsButton: qs("#settingsButton"),
+  settingsMenuButton: qs("#settingsMenuButton"),
+  settingsPage: qs("#settingsPage"),
+  settingsCloseButton: qs("#settingsCloseButton"),
+  mobileManagement: qs("#mobileManagement"),
+  colourSchemeInput: qs("#colourSchemeInput"),
+  lineThicknessInput: qs("#lineThicknessInput"),
+  lineThicknessValue: qs("#lineThicknessValue"),
+  connectionTypeInput: qs("#connectionTypeInput"),
+  lineEndpointInput: qs("#lineEndpointInput"),
+  calmModeInput: qs("#calmModeInput"),
+  kindList: qs("#kindList"),
+  newKindNameInput: qs("#newKindNameInput"),
+  newKindColorInput: qs("#newKindColorInput"),
+  addKindButton: qs("#addKindButton"),
+  graph: qs("#graph"),
+  graphBackground: qs("#graphBackground"),
+  viewport: qs("#viewport"),
+  linksLayer: qs("#linksLayer"),
+  nodesLayer: qs("#nodesLayer"),
+  detailsEmpty: qs("#detailsEmpty"),
+  detailsCloseButton: qs("#detailsCloseButton"),
+  detailsPanel: qs("#detailsPanel"),
+  selectedType: qs("#selectedType"),
+  deleteButton: qs("#deleteButton"),
+  titleInput: qs("#titleInput"),
+  kindInput: qs("#kindInput"),
+  kindColorInput: qs("#kindColorInput"),
+  kindDefaultButton: qs("#kindDefaultButton"),
+  tagInput: qs("#tagInput"),
+  inboxPlacementPanel: qs("#inboxPlacementPanel"),
+  placeTargetInput: qs("#placeTargetInput"),
+  placeRelationInput: qs("#placeRelationInput"),
+  placeThoughtButton: qs("#placeThoughtButton"),
+  noteInput: qs("#noteInput"),
+  notePreview: qs("#notePreview"),
+  linkForm: qs("#linkForm"),
+  linkTargetInput: qs("#linkTargetInput"),
+  linkRelationInput: qs("#linkRelationInput"),
+  connectionCount: qs("#connectionCount"),
+  connectionList: qs("#connectionList"),
+  backlinkCount: qs("#backlinkCount"),
+  backlinkList: qs("#backlinkList"),
+  mentionCount: qs("#mentionCount"),
+  mentionList: qs("#mentionList"),
+  inboxReviewPanel: qs("#inboxReviewPanel"),
+  inboxReviewProgress: qs("#inboxReviewProgress"),
+  inboxReviewCloseButton: qs("#inboxReviewCloseButton"),
+  inboxReviewTitle: qs("#inboxReviewTitle"),
+  inboxReviewNote: qs("#inboxReviewNote"),
+  inboxReviewTargetInput: qs("#inboxReviewTargetInput"),
+  inboxReviewChildButton: qs("#inboxReviewChildButton"),
+  inboxReviewParentButton: qs("#inboxReviewParentButton"),
+  inboxReviewRelatedButton: qs("#inboxReviewRelatedButton"),
+  inboxReviewKeepButton: qs("#inboxReviewKeepButton"),
+  contextMenu: qs("#contextMenu"),
+  nodeCreateForm: qs("#nodeCreateForm"),
+  nodeCreateInput: qs("#nodeCreateInput"),
+  nodeCreateRelationInput: qs("#nodeCreateRelationInput"),
+  nodeCreateCancelButton: qs("#nodeCreateCancelButton"),
+  linkEditForm: qs("#linkEditForm"),
+  linkNameInput: qs("#linkNameInput"),
+  linkDirectionInput: qs("#linkDirectionInput"),
+  linkUnlinkButton: qs("#linkUnlinkButton"),
+  linkKeepInput: qs("#linkKeepInput"),
+  linkRetargetInput: qs("#linkRetargetInput"),
+  linkRetargetRelationInput: qs("#linkRetargetRelationInput"),
+  linkRetargetButton: qs("#linkRetargetButton"),
+  mobileScrim: qs("#mobileScrim"),
+  mobileCaptureButton: qs("#mobileCaptureButton"),
+  mobileCaptureForm: qs("#mobileCaptureForm"),
+  mobileCaptureInput: qs("#mobileCaptureInput"),
+  mobileCaptureCancelButton: qs("#mobileCaptureCancelButton"),
 };
 
 init();
@@ -420,7 +663,7 @@ async function init() {
   requestAnimationFrame(fitToGraph);
 }
 
-function openDatabase() {
+function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (!("indexedDB" in window)) {
       reject(new Error("IndexedDB unavailable"));
@@ -720,14 +963,14 @@ function bindEvents() {
   });
   els.connectionTypeInput.addEventListener("change", () => {
     pushHistory();
-    state.settings.connectionType = els.connectionTypeInput.value;
+    state.settings.connectionType = els.connectionTypeInput.value as MapSettings["connectionType"];
     applySettings();
     renderGraph();
     persistState();
   });
   els.lineEndpointInput.addEventListener("change", () => {
     pushHistory();
-    state.settings.lineEndpoint = els.lineEndpointInput.value;
+    state.settings.lineEndpoint = els.lineEndpointInput.value as MapSettings["lineEndpoint"];
     applySettings();
     renderGraph();
     persistState();
@@ -817,7 +1060,7 @@ function bindEvents() {
   });
 
   els.notePreview.addEventListener("click", (event) => {
-    const mention = event.target.closest("[data-mention-id]");
+    const mention = getClosestElement(event.target, "[data-mention-id]");
     if (mention) {
       event.stopPropagation();
       selectThought(mention.dataset.mentionId);
@@ -826,7 +1069,7 @@ function bindEvents() {
     startNoteEditing();
   });
   els.notePreview.addEventListener("keydown", (event) => {
-    const mention = event.target.closest?.("[data-mention-id]");
+    const mention = getClosestElement(event.target, "[data-mention-id]");
     if (mention && (event.key === "Enter" || event.key === " ")) {
       event.preventDefault();
       selectThought(mention.dataset.mentionId);
@@ -840,7 +1083,7 @@ function bindEvents() {
 
   els.linkForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value);
+    addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value as LinkRelation);
   });
   els.placeThoughtButton.addEventListener("click", placeInboxThought);
   els.detailsCloseButton.addEventListener("click", closeMobilePanels);
@@ -967,7 +1210,7 @@ function applySettings() {
   document.body.dataset.theme = state.settings.theme;
   document.body.dataset.background = state.settings.background;
   els.colourSchemeInput.value = getColourSchemeId(state.settings.theme, state.settings.background);
-  els.lineThicknessInput.value = state.settings.lineThickness;
+  els.lineThicknessInput.value = String(state.settings.lineThickness);
   els.lineThicknessValue.value = state.settings.lineThickness.toFixed(1);
   els.lineThicknessValue.textContent = `${state.settings.lineThickness.toFixed(1)} px`;
   els.connectionTypeInput.value = state.settings.connectionType;
@@ -1210,7 +1453,7 @@ function renderDetails() {
   );
   const isInbox = isInboxThought(selected.id);
   els.inboxPlacementPanel.hidden = !isInbox || !candidates.length;
-  els.linkForm.hidden = isInbox && candidates.length;
+  els.linkForm.hidden = isInbox && candidates.length > 0;
 
   const connected = getConnections(selected.id);
   els.connectionCount.textContent = String(connected.length);
@@ -1374,14 +1617,14 @@ function renderGraph() {
         "data-link-id": visualId,
       });
       group.append(svg("title", {}, `${from.title} ${getLinkDirectionText(link)} ${to.title}`));
-      const linkAttrs = {
+      const linkAttrs: SvgAttrs = {
         class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${
           isFocusLink && !isActiveLink ? " context" : ""
         }`,
         style: `stroke-width: ${thickness}px`,
       };
       if (isAppearing) linkAttrs.pathLength = 1;
-      const hitAttrs = {
+      const hitAttrs: SvgAttrs = {
         class: "link-hit",
         "data-link-id": visualId,
       };
@@ -1650,7 +1893,7 @@ function trimPointToBox(center, target, box, extraGap = 0) {
   };
 }
 
-function addThought(title, anchorId = state.selectedId, relation = "parent-of", options = {}) {
+function addThought(title: string, anchorId = state.selectedId, relation: LinkRelation = "parent-of", options: AddThoughtOptions = {}) {
   pushHistory();
   const selected = getThought(anchorId);
   const connectedCount = selected ? getConnectedThoughts(selected.id).length : 0;
@@ -1688,7 +1931,7 @@ function addThought(title, anchorId = state.selectedId, relation = "parent-of", 
   return thought;
 }
 
-function addLink(activeId, targetId, relation = "parent-of") {
+function addLink(activeId: string | null, targetId: string | null, relation: LinkRelation = "parent-of") {
   if (!activeId || !targetId || activeId === targetId) return;
   const isRelated = relation === "related";
   const from = isRelated || relation !== "child-of" ? activeId : targetId;
@@ -1789,7 +2032,7 @@ function deleteSelectedThought() {
   });
 }
 
-function selectThought(id, options = {}) {
+function selectThought(id: string | null, options: SelectThoughtOptions = {}) {
   clearPendingGraphTransition();
   selectedLinkId = null;
   if (id && isInboxThought(id)) {
@@ -1823,7 +2066,7 @@ function selectThought(id, options = {}) {
   }
 }
 
-function centerSelected(options = {}) {
+function centerSelected(options: CenterOptions = {}) {
   const toPositions = computeFocusPositions(state.selectedId);
   const toView = getFocusView(state.selectedId, toPositions);
   if (!toView) return;
@@ -1893,7 +2136,7 @@ function runGraphTransition({
   dimThoughts = [],
   delay = LINK_DRAW_DURATION,
   save = true,
-}) {
+}: GraphTransitionOptions) {
   clearPendingGraphTransition();
   stopFocusAnimation();
   graphEffects.appearingLinkIds = new Set(appearingLinkIds);
@@ -1951,11 +2194,31 @@ function clearGraphEffects() {
   graphEffects.dimThoughts.clear();
 }
 
-function animateFocus({ fromPositions, toPositions, toView, save = true }) {
+function animateFocus({
+  fromPositions,
+  toPositions,
+  toView,
+  save = true,
+}: {
+  fromPositions: PositionMap;
+  toPositions: PositionMap;
+  toView: ViewState;
+  save?: boolean;
+}) {
   animateCamera({ fromPositions, toPositions, toView, save });
 }
 
-function animateCamera({ fromPositions = getVisualPositions(), toPositions = getVisualPositions(), toView, save = true }) {
+function animateCamera({
+  fromPositions = getVisualPositions(),
+  toPositions = getVisualPositions(),
+  toView,
+  save = true,
+}: {
+  fromPositions?: PositionMap;
+  toPositions?: PositionMap;
+  toView: ViewState;
+  save?: boolean;
+}) {
   clearPendingGraphTransition();
   stopFocusAnimation();
   const fromView = { ...state.view };
@@ -2059,7 +2322,7 @@ function computeFocusPositions(selectedId = state.selectedId) {
   return positions;
 }
 
-function arrangeHorizontalThoughtRow(positions, thoughts, centerX, y, options = {}) {
+function arrangeHorizontalThoughtRow(positions: PositionMap, thoughts: Thought[], centerX: number, y: number, options: RowOptions = {}) {
   if (!thoughts.length) return;
   const gap = options.gap ?? 34;
   const ordered = [...thoughts].sort((a, b) => a.x - b.x || a.title.localeCompare(b.title));
@@ -2073,7 +2336,7 @@ function arrangeHorizontalThoughtRow(positions, thoughts, centerX, y, options = 
   });
 }
 
-function arrangeVerticalThoughtColumn(positions, thoughts, edgeX, centerY, options = {}) {
+function arrangeVerticalThoughtColumn(positions: PositionMap, thoughts: Thought[], edgeX: number, centerY: number, options: ColumnOptions = {}) {
   if (!thoughts.length) return;
   const gap = options.gap ?? 34;
   const side = options.side || "left";
@@ -2089,7 +2352,7 @@ function arrangeVerticalThoughtColumn(positions, thoughts, edgeX, centerY, optio
   });
 }
 
-function arrangeParentRelatedContext(positions, entries, options = {}) {
+function arrangeParentRelatedContext(positions: PositionMap, entries: { parentId: string; thought: Thought }[], options: ParentRelatedOptions = {}) {
   if (!entries.length) return;
   const byParent = new Map();
   entries.forEach((entry) => {
@@ -2367,7 +2630,7 @@ function getDefaultKindId() {
   return state.kinds.some((kind) => kind.id === state.defaultKindId) ? state.defaultKindId : state.kinds[0]?.id || DEFAULT_KIND_ID;
 }
 
-function createKindFromPrompt(options = {}) {
+function createKindFromPrompt(options: CreateKindOptions = {}) {
   const name = window.prompt("New kind name", "Thought");
   if (!name) {
     const selected = getSelectedThought();
@@ -2397,7 +2660,7 @@ function addKindFromSettings() {
   persistState();
 }
 
-function addKind(name, color, options = {}) {
+function addKind(name: string, color: string, options: AddKindOptions = {}) {
   const normalizedName = normalizeKindName(name);
   if (!normalizedName) return null;
   const existing = state.kinds.find((kind) => kind.name.toLowerCase() === normalizedName.toLowerCase());
@@ -2662,7 +2925,7 @@ function placeInboxThought() {
   if (!selected || !isInboxThought(selected.id)) return;
   const targetId = els.placeTargetInput.value;
   if (!targetId) return;
-  addLink(selected.id, targetId, els.placeRelationInput.value);
+  addLink(selected.id, targetId, els.placeRelationInput.value as LinkRelation);
   showInboxOnly = false;
   renderThoughtList();
   renderDetails();
@@ -2909,7 +3172,7 @@ function renderPanelState() {
   renderMobileCapture();
 }
 
-function openMobileLibrary(options = {}) {
+function openMobileLibrary(options: MobileLibraryOptions = {}) {
   if (!isMobileLayout()) return;
   mobileLibraryOpen = true;
   mobileDetailsOpen = false;
@@ -2969,12 +3232,12 @@ function renderMobileCapture() {
   els.mobileCaptureButton.setAttribute("aria-expanded", String(showCapture));
 }
 
-function onPointerDown(event) {
+function onPointerDown(event: PointerEvent) {
   closeContextMenu();
   if (event.button !== 0) return;
   event.preventDefault();
   els.graph.setPointerCapture(event.pointerId);
-  const link = event.target.closest(".link-group");
+  const link = getClosestElement(event.target, ".link-group");
   if (link) {
     selectLink(link.dataset.linkId);
     pointerMode = null;
@@ -2982,9 +3245,9 @@ function onPointerDown(event) {
     return;
   }
 
-  const node = event.target.closest(".node");
+  const node = getClosestElement(event.target, ".node");
 
-  if (node) {
+  if (node?.dataset.id) {
     // Thoughts are arranged automatically by the focus layout, so they can't be
     // dragged out of place. Pressing one (click or drag) just selects it; the smooth
     // recenter happens on release, the same transition as clicking it in the list.
@@ -3003,7 +3266,7 @@ function onPointerDown(event) {
   };
 }
 
-function onPointerMove(event) {
+function onPointerMove(event: PointerEvent) {
   updateHoverThought(event);
   // Only the empty canvas pans; a press on a node never moves it.
   if (pointerMode?.type !== "pan" || !pointerStart) return;
@@ -3111,7 +3374,7 @@ function onNodeCreateSubmit(event) {
   event.preventDefault();
   const title = els.nodeCreateInput.value.trim();
   if (!title || !contextAnchorId) return;
-  addThought(title, contextAnchorId, els.nodeCreateRelationInput.value);
+  addThought(title, contextAnchorId, els.nodeCreateRelationInput.value as LinkRelation);
   closeContextMenu();
 }
 
@@ -3142,7 +3405,7 @@ function onLinkEditSubmit(event) {
   const link = getLink(contextLinkId);
   if (!link) return;
   const direction = els.linkDirectionInput.value;
-  const nextLink = {
+  const nextLink: Link = {
     ...link,
     name: els.linkNameInput.value.trim(),
     type: direction === "related" ? "related" : "parent",
@@ -3180,10 +3443,10 @@ function retargetContextLink() {
   const fromPositions = getVisualPositions();
   const leavingLink = clone(link);
 
-  const relation = els.linkRetargetRelationInput.value;
+  const relation = els.linkRetargetRelationInput.value as RetargetRelation;
   let nextFrom = keepId;
   let nextTo = targetId;
-  let nextType = relation === "related" ? "related" : "parent";
+  let nextType: LinkType = relation === "related" ? "related" : "parent";
   if (relation === "child-of") {
     nextFrom = targetId;
     nextTo = keepId;
@@ -3198,7 +3461,7 @@ function retargetContextLink() {
     nextType = "parent";
   }
 
-  const nextLink = {
+  const nextLink: Link = {
     ...link,
     from: nextFrom,
     to: nextTo,
@@ -3373,9 +3636,19 @@ function getSelectedThought() {
   return getThought(state.selectedId);
 }
 
-function svg(tag, attrs = {}, text) {
+function qs<T extends Element = HTMLElement>(selector: string): T {
+  const element = document.querySelector(selector);
+  if (!element) throw new Error(`Missing element: ${selector}`);
+  return element as T;
+}
+
+function getClosestElement(target: EventTarget | null, selector: string): HTMLElement | null {
+  return target instanceof Element ? target.closest(selector) : null;
+}
+
+function svg(tag: string, attrs: SvgAttrs = {}, text?: string): SVGElement {
   const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, value));
+  Object.entries(attrs).forEach(([key, value]) => element.setAttribute(key, String(value)));
   if (text !== undefined) element.textContent = text;
   return element;
 }
@@ -3388,7 +3661,7 @@ function makeId(prefix) {
   return `${prefix}-${id}`;
 }
 
-function clone(value) {
+function clone<T>(value: T): T {
   return "structuredClone" in window ? structuredClone(value) : JSON.parse(JSON.stringify(value));
 }
 

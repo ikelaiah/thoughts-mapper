@@ -142,6 +142,8 @@ export type GraphTransitionOptions = {
 
 export type AppElements = {
   appShell: HTMLElement;
+  leftResizeHandle: HTMLElement;
+  rightResizeHandle: HTMLElement;
   saveState: HTMLElement;
   libraryCloseButton: HTMLButtonElement;
   projectControls: HTMLElement;
@@ -207,11 +209,14 @@ export type AppElements = {
   placeTargetInput: HTMLSelectElement;
   placeRelationInput: HTMLSelectElement;
   placeThoughtButton: HTMLButtonElement;
+  placePreviewText: HTMLElement;
   noteInput: HTMLTextAreaElement;
   notePreview: HTMLElement;
   linkForm: HTMLFormElement;
   linkTargetInput: HTMLSelectElement;
   linkRelationInput: HTMLSelectElement;
+  linkSubmitButton: HTMLButtonElement;
+  linkPreviewText: HTMLElement;
   connectionCount: HTMLElement;
   connectionList: HTMLElement;
   backlinkCount: HTMLElement;
@@ -221,9 +226,12 @@ export type AppElements = {
   inboxReviewPanel: HTMLElement;
   inboxReviewProgress: HTMLElement;
   inboxReviewCloseButton: HTMLButtonElement;
+  inboxReviewPrevButton: HTMLButtonElement;
+  inboxReviewNextButton: HTMLButtonElement;
   inboxReviewTitle: HTMLElement;
   inboxReviewNote: HTMLElement;
   inboxReviewTargetInput: HTMLSelectElement;
+  inboxReviewPreview: HTMLElement;
   inboxReviewChildButton: HTMLButtonElement;
   inboxReviewParentButton: HTMLButtonElement;
   inboxReviewRelatedButton: HTMLButtonElement;

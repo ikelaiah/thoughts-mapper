@@ -2,6 +2,10 @@ import type { AppElements } from "./types";
 
 export type UiEventHandlers = {
   onResize: () => void;
+  startLeftPanelResize: (event: PointerEvent) => void;
+  startRightPanelResize: (event: PointerEvent) => void;
+  resetLeftPanelWidth: () => void;
+  resetRightPanelWidth: () => void;
   closeMobilePanels: () => void;
   switchProject: () => void;
   renameActiveProject: () => void;
@@ -43,8 +47,11 @@ export type UiEventHandlers = {
   onNotePreviewClick: (event: MouseEvent) => void;
   onNotePreviewKeydown: (event: KeyboardEvent) => void;
   onLinkSubmit: (event: SubmitEvent) => void;
+  renderRelationshipPreviews: () => void;
   placeInboxThought: () => void;
   closeInboxReview: () => void;
+  previousInboxReviewThought: () => void;
+  nextInboxReviewThought: () => void;
   placeInboxReviewAsChild: () => void;
   placeInboxReviewAsParent: () => void;
   placeInboxReviewRelated: () => void;
@@ -63,12 +70,18 @@ export type UiEventHandlers = {
   renderLinkRetargetOptions: () => void;
   retargetContextLink: () => void;
   onDocumentPointerDown: (event: PointerEvent) => void;
+  onDocumentPointerMove: (event: PointerEvent) => void;
+  onDocumentPointerUp: (event: PointerEvent) => void;
   onKeyDown: (event: KeyboardEvent) => void;
 };
 
 export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void {
   window.addEventListener("resize", handlers.onResize);
 
+  els.leftResizeHandle.addEventListener("pointerdown", handlers.startLeftPanelResize);
+  els.rightResizeHandle.addEventListener("pointerdown", handlers.startRightPanelResize);
+  els.leftResizeHandle.addEventListener("dblclick", handlers.resetLeftPanelWidth);
+  els.rightResizeHandle.addEventListener("dblclick", handlers.resetRightPanelWidth);
   els.libraryCloseButton.addEventListener("click", handlers.closeMobilePanels);
   els.projectSelect.addEventListener("change", handlers.switchProject);
   els.projectNameInput.addEventListener("change", handlers.renameActiveProject);
@@ -112,10 +125,17 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.notePreview.addEventListener("click", handlers.onNotePreviewClick);
   els.notePreview.addEventListener("keydown", handlers.onNotePreviewKeydown);
   els.linkForm.addEventListener("submit", handlers.onLinkSubmit);
+  els.linkTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);
+  els.linkRelationInput.addEventListener("change", handlers.renderRelationshipPreviews);
+  els.placeTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);
+  els.placeRelationInput.addEventListener("change", handlers.renderRelationshipPreviews);
   els.placeThoughtButton.addEventListener("click", handlers.placeInboxThought);
   els.detailsCloseButton.addEventListener("click", handlers.closeMobilePanels);
   els.mobileScrim.addEventListener("click", handlers.closeMobilePanels);
   els.inboxReviewCloseButton.addEventListener("click", handlers.closeInboxReview);
+  els.inboxReviewPrevButton.addEventListener("click", handlers.previousInboxReviewThought);
+  els.inboxReviewNextButton.addEventListener("click", handlers.nextInboxReviewThought);
+  els.inboxReviewTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);
   els.inboxReviewChildButton.addEventListener("click", handlers.placeInboxReviewAsChild);
   els.inboxReviewParentButton.addEventListener("click", handlers.placeInboxReviewAsParent);
   els.inboxReviewRelatedButton.addEventListener("click", handlers.placeInboxReviewRelated);
@@ -135,5 +155,8 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.linkKeepInput.addEventListener("change", handlers.renderLinkRetargetOptions);
   els.linkRetargetButton.addEventListener("click", handlers.retargetContextLink);
   document.addEventListener("pointerdown", handlers.onDocumentPointerDown);
+  document.addEventListener("pointermove", handlers.onDocumentPointerMove);
+  document.addEventListener("pointerup", handlers.onDocumentPointerUp);
+  document.addEventListener("pointercancel", handlers.onDocumentPointerUp);
   window.addEventListener("keydown", handlers.onKeyDown);
 }

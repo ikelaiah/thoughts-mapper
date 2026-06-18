@@ -58,6 +58,16 @@ let storageMode = "indexeddb";
 let saveTimer: number | undefined;
 let statusTimer: number | undefined;
 let graphRect = { width: 1, height: 1 };
+type PanelSide = "left" | "right";
+const PANEL_WIDTH_RULES: Record<PanelSide, { storageKey: string; defaultValue: number; min: number; max: number }> = {
+  left: { storageKey: "thoughts-mapper:left-panel-width", defaultValue: 320, min: 240, max: 460 },
+  right: { storageKey: "thoughts-mapper:right-panel-width", defaultValue: 360, min: 300, max: 560 },
+};
+let panelWidths: Record<PanelSide, number> = {
+  left: readPanelWidth("left"),
+  right: readPanelWidth("right"),
+};
+let panelResize: { side: PanelSide; startX: number; startWidth: number; pointerId: number; handle: HTMLElement } | null = null;
 let pointerMode: PointerMode | null = null;
 let pointerStart: PointerStart | null = null;
 let focusAnimation: number | null = null;
@@ -91,6 +101,8 @@ let sidebarActionsHome: Comment | null = null;
 
 const els: AppElements = {
   appShell: qs("#appShell"),
+  leftResizeHandle: qs("#leftResizeHandle"),
+  rightResizeHandle: qs("#rightResizeHandle"),
   saveState: qs("#saveState"),
   libraryCloseButton: qs("#libraryCloseButton"),
   projectControls: qs("#projectControls"),
@@ -156,11 +168,14 @@ const els: AppElements = {
   placeTargetInput: qs("#placeTargetInput"),
   placeRelationInput: qs("#placeRelationInput"),
   placeThoughtButton: qs("#placeThoughtButton"),
+  placePreviewText: qs("#placePreviewText"),
   noteInput: qs("#noteInput"),
   notePreview: qs("#notePreview"),
   linkForm: qs("#linkForm"),
   linkTargetInput: qs("#linkTargetInput"),
   linkRelationInput: qs("#linkRelationInput"),
+  linkSubmitButton: qs("#linkSubmitButton"),
+  linkPreviewText: qs("#linkPreviewText"),
   connectionCount: qs("#connectionCount"),
   connectionList: qs("#connectionList"),
   backlinkCount: qs("#backlinkCount"),
@@ -170,9 +185,12 @@ const els: AppElements = {
   inboxReviewPanel: qs("#inboxReviewPanel"),
   inboxReviewProgress: qs("#inboxReviewProgress"),
   inboxReviewCloseButton: qs("#inboxReviewCloseButton"),
+  inboxReviewPrevButton: qs("#inboxReviewPrevButton"),
+  inboxReviewNextButton: qs("#inboxReviewNextButton"),
   inboxReviewTitle: qs("#inboxReviewTitle"),
   inboxReviewNote: qs("#inboxReviewNote"),
   inboxReviewTargetInput: qs("#inboxReviewTargetInput"),
+  inboxReviewPreview: qs("#inboxReviewPreview"),
   inboxReviewChildButton: qs("#inboxReviewChildButton"),
   inboxReviewParentButton: qs("#inboxReviewParentButton"),
   inboxReviewRelatedButton: qs("#inboxReviewRelatedButton"),
@@ -209,6 +227,7 @@ async function init() {
   }
   state = clone(getActiveProject().state);
   setupResponsiveManagementSlots();
+  applyPanelWidths();
   measureGraph();
   bindEvents();
   syncResponsiveLayout();
@@ -413,9 +432,14 @@ function bindEvents() {
   bindUiEvents(els, {
     onResize: () => {
       syncResponsiveLayout();
+      applyPanelWidths();
       measureGraph();
       renderGraph();
     },
+    startLeftPanelResize: (event) => startPanelResize(event, "left"),
+    startRightPanelResize: (event) => startPanelResize(event, "right"),
+    resetLeftPanelWidth: () => resetPanelWidth("left"),
+    resetRightPanelWidth: () => resetPanelWidth("right"),
     closeMobilePanels,
     switchProject,
     renameActiveProject,
@@ -588,10 +612,13 @@ function bindEvents() {
       event.preventDefault();
       addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value as LinkRelation);
     },
+    renderRelationshipPreviews,
     placeInboxThought,
     closeInboxReview,
-    placeInboxReviewAsChild: () => placeInboxReviewThought("parent-of"),
-    placeInboxReviewAsParent: () => placeInboxReviewThought("child-of"),
+    previousInboxReviewThought,
+    nextInboxReviewThought,
+    placeInboxReviewAsChild: () => placeInboxReviewThought("child-of"),
+    placeInboxReviewAsParent: () => placeInboxReviewThought("parent-of"),
     placeInboxReviewRelated: () => placeInboxReviewThought("related"),
     keepInboxReviewThought,
     deleteSelectedThought,
@@ -607,6 +634,8 @@ function bindEvents() {
     unlinkContextLink,
     renderLinkRetargetOptions,
     retargetContextLink,
+    onDocumentPointerMove,
+    onDocumentPointerUp,
     onDocumentPointerDown,
     onKeyDown: (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -688,6 +717,113 @@ function measureGraph() {
     width: Math.max(bounds.width, 1),
     height: Math.max(bounds.height, 1),
   };
+}
+
+function readPanelWidth(side: PanelSide) {
+  const rule = PANEL_WIDTH_RULES[side];
+  try {
+    const stored = Number(window.localStorage.getItem(rule.storageKey));
+    if (Number.isFinite(stored)) return clamp(stored, rule.min, rule.max);
+  } catch {
+    // Layout preferences are optional; blocked storage should not affect the app.
+  }
+  return rule.defaultValue;
+}
+
+function applyPanelWidths() {
+  clampPanelWidths();
+  els.appShell.style.setProperty("--left-panel-width", `${panelWidths.left}px`);
+  els.appShell.style.setProperty("--right-panel-width", `${panelWidths.right}px`);
+  updatePanelResizeHandleValues();
+}
+
+function clampPanelWidths() {
+  (Object.keys(PANEL_WIDTH_RULES) as PanelSide[]).forEach((side) => {
+    const rule = PANEL_WIDTH_RULES[side];
+    panelWidths[side] = clamp(panelWidths[side], rule.min, getPanelMaxWidth(side));
+  });
+}
+
+function getPanelMaxWidth(side: PanelSide) {
+  const rule = PANEL_WIDTH_RULES[side];
+  const otherSide: PanelSide = side === "left" ? "right" : "left";
+  const otherHidden = otherSide === "left" ? sidebarHidden : detailsHidden;
+  const otherWidth = otherHidden || isMobileLayout() ? 0 : panelWidths[otherSide];
+  const minimumStageWidth = 440;
+  const available = window.innerWidth - otherWidth - minimumStageWidth;
+  return Math.max(rule.min, Math.min(rule.max, available));
+}
+
+function updatePanelResizeHandleValues() {
+  els.leftResizeHandle.setAttribute("aria-valuemin", String(PANEL_WIDTH_RULES.left.min));
+  els.leftResizeHandle.setAttribute("aria-valuemax", String(getPanelMaxWidth("left")));
+  els.leftResizeHandle.setAttribute("aria-valuenow", String(Math.round(panelWidths.left)));
+  els.rightResizeHandle.setAttribute("aria-valuemin", String(PANEL_WIDTH_RULES.right.min));
+  els.rightResizeHandle.setAttribute("aria-valuemax", String(getPanelMaxWidth("right")));
+  els.rightResizeHandle.setAttribute("aria-valuenow", String(Math.round(panelWidths.right)));
+}
+
+function startPanelResize(event: PointerEvent, side: PanelSide) {
+  if (isMobileLayout() || (side === "left" && sidebarHidden) || (side === "right" && detailsHidden)) return;
+  event.preventDefault();
+  const handle = event.currentTarget as HTMLElement;
+  panelResize = {
+    side,
+    startX: event.clientX,
+    startWidth: panelWidths[side],
+    pointerId: event.pointerId,
+    handle,
+  };
+  handle.setPointerCapture(event.pointerId);
+  document.body.classList.add("panel-resizing");
+}
+
+function onDocumentPointerMove(event: PointerEvent) {
+  if (!panelResize) return;
+  event.preventDefault();
+  const deltaX = event.clientX - panelResize.startX;
+  const width = panelResize.side === "left"
+    ? panelResize.startWidth + deltaX
+    : panelResize.startWidth - deltaX;
+  setPanelWidth(panelResize.side, width);
+}
+
+function onDocumentPointerUp(event: PointerEvent) {
+  if (!panelResize || event.pointerId !== panelResize.pointerId) return;
+  try {
+    panelResize.handle.releasePointerCapture(event.pointerId);
+  } catch {
+    // The pointer can already be released if the browser cancels the drag.
+  }
+  panelResize = null;
+  document.body.classList.remove("panel-resizing");
+  persistPanelWidths();
+  refreshGraphAfterPanelChange();
+}
+
+function setPanelWidth(side: PanelSide, width: number) {
+  const rule = PANEL_WIDTH_RULES[side];
+  panelWidths[side] = clamp(width, rule.min, getPanelMaxWidth(side));
+  applyPanelWidths();
+  measureGraph();
+  renderGraph();
+}
+
+function resetPanelWidth(side: PanelSide) {
+  panelWidths[side] = PANEL_WIDTH_RULES[side].defaultValue;
+  applyPanelWidths();
+  persistPanelWidths();
+  refreshGraphAfterPanelChange();
+}
+
+function persistPanelWidths() {
+  try {
+    (Object.keys(PANEL_WIDTH_RULES) as PanelSide[]).forEach((side) => {
+      window.localStorage.setItem(PANEL_WIDTH_RULES[side].storageKey, String(Math.round(panelWidths[side])));
+    });
+  } catch {
+    // Non-critical preference persistence.
+  }
 }
 
 function render() {
@@ -933,6 +1069,8 @@ function renderDetails() {
   }
 
   const candidates = state.thoughts.filter((thought) => thought.id !== selected.id);
+  const linkTargetId = els.linkTargetInput.value;
+  const placeTargetId = els.placeTargetInput.value;
   els.linkTargetInput.replaceChildren(
     ...candidates.map((thought) => {
       const option = document.createElement("option");
@@ -941,6 +1079,7 @@ function renderDetails() {
       return option;
     }),
   );
+  if (candidates.some((thought) => thought.id === linkTargetId)) els.linkTargetInput.value = linkTargetId;
   els.placeTargetInput.replaceChildren(
     ...candidates.map((thought) => {
       const option = document.createElement("option");
@@ -949,9 +1088,17 @@ function renderDetails() {
       return option;
     }),
   );
+  if (candidates.some((thought) => thought.id === placeTargetId)) els.placeTargetInput.value = placeTargetId;
   const isInbox = isInboxThought(selected.id);
   els.inboxPlacementPanel.hidden = !isInbox || !candidates.length;
   els.linkForm.hidden = isInbox && candidates.length > 0;
+  els.linkTargetInput.disabled = !candidates.length;
+  els.linkRelationInput.disabled = !candidates.length;
+  els.linkSubmitButton.disabled = !candidates.length;
+  els.placeTargetInput.disabled = !candidates.length;
+  els.placeRelationInput.disabled = !candidates.length;
+  els.placeThoughtButton.disabled = !candidates.length;
+  renderRelationshipPreviews();
 
   const connected = getConnections(selected.id);
   els.connectionCount.textContent = String(connected.length);
@@ -1973,6 +2120,74 @@ function optionElement(value, text) {
   return option;
 }
 
+function renderRelationshipPreviews() {
+  renderLinkPreview();
+  renderPlacePreview();
+  renderInboxReviewPreview();
+}
+
+function renderLinkPreview() {
+  const selected = getSelectedThought();
+  const target = getThought(els.linkTargetInput.value);
+  const selectedName = selected ? trimLabel(selected.title, 28) : "selected thought";
+  setRelationOptionText(els.linkRelationInput, {
+    "parent-of": `Add as child of ${selectedName}`,
+    "child-of": `Make parent of ${selectedName}`,
+    related: `Relate to ${selectedName}`,
+  });
+  els.linkPreviewText.textContent = selected && target
+    ? describeTargetRelation(selected, target, els.linkRelationInput.value as LinkRelation)
+    : "Choose another thought to connect.";
+}
+
+function renderPlacePreview() {
+  const selected = getSelectedThought();
+  const target = getThought(els.placeTargetInput.value);
+  const targetName = target ? trimLabel(target.title, 28) : "selected thought";
+  setRelationOptionText(els.placeRelationInput, {
+    "child-of": `Add as child of ${targetName}`,
+    "parent-of": `Make parent of ${targetName}`,
+    related: `Relate to ${targetName}`,
+  });
+  els.placePreviewText.textContent = selected && target
+    ? describeActiveRelation(selected, target, els.placeRelationInput.value as LinkRelation)
+    : "Choose where this thought belongs.";
+}
+
+function renderInboxReviewPreview() {
+  const current = getCurrentInboxReviewThought();
+  const target = getThought(els.inboxReviewTargetInput.value);
+  const targetName = target ? trimLabel(target.title, 22) : "selected thought";
+  els.inboxReviewChildButton.textContent = `Add as child of ${targetName}`;
+  els.inboxReviewParentButton.textContent = `Make parent of ${targetName}`;
+  els.inboxReviewRelatedButton.textContent = `Relate to ${targetName}`;
+  els.inboxReviewChildButton.title = current && target ? describeActiveRelation(current, target, "child-of") : "";
+  els.inboxReviewParentButton.title = current && target ? describeActiveRelation(current, target, "parent-of") : "";
+  els.inboxReviewRelatedButton.title = current && target ? describeActiveRelation(current, target, "related") : "";
+  els.inboxReviewPreview.textContent = current && target
+    ? `${current.title} will be placed with ${target.title}.`
+    : "Choose a thought to connect.";
+}
+
+function setRelationOptionText(select: HTMLSelectElement, labels: Partial<Record<LinkRelation, string>>) {
+  Array.from(select.options).forEach((option) => {
+    const label = labels[option.value as LinkRelation];
+    if (label) option.textContent = label;
+  });
+}
+
+function describeTargetRelation(active: Thought, target: Thought, relation: LinkRelation) {
+  if (relation === "child-of") return `${target.title} will become the parent of ${active.title}.`;
+  if (relation === "related") return `${target.title} and ${active.title} will be related.`;
+  return `${target.title} will become a child of ${active.title}.`;
+}
+
+function describeActiveRelation(active: Thought, target: Thought, relation: LinkRelation) {
+  if (relation === "child-of") return `${active.title} will become a child of ${target.title}.`;
+  if (relation === "related") return `${active.title} and ${target.title} will be related.`;
+  return `${active.title} will become the parent of ${target.title}.`;
+}
+
 function openInboxReview() {
   inboxReviewOpen = true;
   inboxReviewIndex = clamp(inboxReviewIndex, 0, Math.max(getInboxThoughts().length - 1, 0));
@@ -1999,6 +2214,7 @@ function renderInboxReview() {
   const inboxThoughts = getInboxThoughts();
   const current = getCurrentInboxReviewThought();
   const candidates = state.thoughts.filter((thought) => thought.id !== current?.id);
+  const targetId = els.inboxReviewTargetInput.value;
   els.inboxReviewProgress.textContent = inboxThoughts.length
     ? `${inboxReviewIndex + 1} of ${inboxThoughts.length} unplaced thoughts`
     : "No unplaced thoughts.";
@@ -2007,10 +2223,30 @@ function renderInboxReview() {
   els.inboxReviewTargetInput.replaceChildren(
     ...candidates.map((thought) => optionElement(thought.id, thought.title)),
   );
+  if (candidates.some((thought) => thought.id === targetId)) els.inboxReviewTargetInput.value = targetId;
   const disabled = !current || !candidates.length;
   [els.inboxReviewTargetInput, els.inboxReviewChildButton, els.inboxReviewParentButton, els.inboxReviewRelatedButton].forEach((element) => {
     element.disabled = disabled;
   });
+  els.inboxReviewPrevButton.disabled = inboxThoughts.length < 2;
+  els.inboxReviewNextButton.disabled = inboxThoughts.length < 2;
+  els.inboxReviewKeepButton.disabled = !current;
+  renderInboxReviewPreview();
+}
+
+function previousInboxReviewThought() {
+  moveInboxReviewThought(-1);
+}
+
+function nextInboxReviewThought() {
+  moveInboxReviewThought(1);
+}
+
+function moveInboxReviewThought(direction: number) {
+  const inboxThoughts = getInboxThoughts();
+  if (inboxThoughts.length < 2) return;
+  inboxReviewIndex = (inboxReviewIndex + direction + inboxThoughts.length) % inboxThoughts.length;
+  renderInboxReview();
 }
 
 function placeInboxReviewThought(relation) {

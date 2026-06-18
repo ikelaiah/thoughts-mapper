@@ -74,6 +74,8 @@
         </div>
       </aside>
 
+      <div id="leftResizeHandle" class="panel-resize-handle left-resize" role="separator" aria-label="Resize library panel" aria-orientation="vertical" tabindex="0"></div>
+
       <main class="map-stage" aria-label="Thought map">
         <div class="ambient-layer" aria-hidden="true">
           <span></span>
@@ -111,6 +113,8 @@
         </svg>
       </main>
 
+      <div id="rightResizeHandle" class="panel-resize-handle right-resize" role="separator" aria-label="Resize details panel" aria-orientation="vertical" tabindex="0"></div>
+
       <aside class="right-panel" aria-label="Thought details">
         <div class="mobile-sheet-bar">
           <span aria-hidden="true"></span>
@@ -147,16 +151,22 @@
 
           <section id="inboxPlacementPanel" class="inbox-placement" hidden>
             <div>
-              <strong>Inbox thought</strong>
-              <p>It stays out of the map until you connect it.</p>
+              <strong>Place inbox thought</strong>
+              <p id="placePreviewText">Choose where this thought belongs.</p>
             </div>
             <div class="place-form">
-              <select id="placeTargetInput" aria-label="Place with thought"></select>
-              <select id="placeRelationInput" aria-label="Placement relation">
-                <option value="parent-of">Make it a child of</option>
-                <option value="child-of">Make it a parent of</option>
-                <option value="related">Relate it to</option>
-              </select>
+              <label class="field compact-field">
+                <span>Connect to</span>
+                <select id="placeTargetInput" aria-label="Place with thought"></select>
+              </label>
+              <label class="field compact-field">
+                <span>Relationship</span>
+                <select id="placeRelationInput" aria-label="Placement relation">
+                  <option value="child-of">Add as child</option>
+                  <option value="parent-of">Make parent</option>
+                  <option value="related">Relate</option>
+                </select>
+              </label>
               <button id="placeThoughtButton" type="button">Place thought</button>
             </div>
           </section>
@@ -174,19 +184,23 @@
           </div>
 
           <form id="linkForm" class="link-form">
+            <div class="link-copy">
+              <strong>Link another thought</strong>
+              <p id="linkPreviewText">Choose another thought to connect.</p>
+            </div>
             <label class="field">
-              <span>Connect</span>
+              <span>Other thought</span>
               <select id="linkTargetInput"></select>
             </label>
             <label class="field">
-              <span>Relation</span>
+              <span>Relationship</span>
               <select id="linkRelationInput">
-                <option value="parent-of">Make selected parent</option>
-                <option value="child-of">Make selected child</option>
-                <option value="related">Related</option>
+                <option value="parent-of">Add as child</option>
+                <option value="child-of">Make parent</option>
+                <option value="related">Relate</option>
               </select>
             </label>
-            <button type="submit">Link</button>
+            <button id="linkSubmitButton" type="submit">Create link</button>
           </form>
 
           <div class="section-heading">
@@ -225,17 +239,28 @@
           <h2>Inbox</h2>
           <p id="inboxReviewProgress">No unplaced thoughts.</p>
         </div>
-        <button id="inboxReviewCloseButton" type="button" aria-label="Close inbox review">Close</button>
+        <div class="inbox-review-header-actions">
+          <button id="inboxReviewPrevButton" type="button">Previous</button>
+          <button id="inboxReviewNextButton" type="button">Next</button>
+          <button id="inboxReviewCloseButton" type="button" aria-label="Close inbox review">Close</button>
+        </div>
       </header>
       <div class="inbox-review-body">
-        <strong id="inboxReviewTitle">Inbox clear</strong>
+        <div class="inbox-review-current">
+          <span>Current inbox thought</span>
+          <strong id="inboxReviewTitle">Inbox clear</strong>
+        </div>
         <p id="inboxReviewNote">Captured thoughts will appear here until you connect them.</p>
-        <select id="inboxReviewTargetInput" aria-label="Connect inbox thought to"></select>
+        <label class="field compact-field">
+          <span>Connect to</span>
+          <select id="inboxReviewTargetInput" aria-label="Connect inbox thought to"></select>
+        </label>
+        <p id="inboxReviewPreview" class="relationship-preview">Choose a thought to connect.</p>
         <div class="inbox-review-actions">
-          <button id="inboxReviewChildButton" type="button">Make child</button>
+          <button id="inboxReviewChildButton" type="button">Add as child</button>
           <button id="inboxReviewParentButton" type="button">Make parent</button>
           <button id="inboxReviewRelatedButton" type="button">Relate</button>
-          <button id="inboxReviewKeepButton" type="button">Keep in inbox</button>
+          <button id="inboxReviewKeepButton" type="button">Skip for now</button>
         </div>
       </div>
     </section>

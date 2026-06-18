@@ -114,6 +114,7 @@ const seedState = {
   settings: {
     theme: "dark",
     background: "calm",
+    calmMode: true,
     lineThickness: 2.5,
     connectionType: "curve",
     lineEndpoint: "floating",
@@ -334,6 +335,7 @@ const els = {
   lineThicknessValue: document.querySelector("#lineThicknessValue"),
   connectionTypeInput: document.querySelector("#connectionTypeInput"),
   lineEndpointInput: document.querySelector("#lineEndpointInput"),
+  calmModeInput: document.querySelector("#calmModeInput"),
   kindList: document.querySelector("#kindList"),
   newKindNameInput: document.querySelector("#newKindNameInput"),
   newKindColorInput: document.querySelector("#newKindColorInput"),
@@ -591,8 +593,9 @@ function sanitizeState(nextState) {
   clean.defaultKindId = clean.kinds.some((kind) => kind.id === clean.defaultKindId)
     ? clean.defaultKindId
     : clean.kinds[0]?.id || DEFAULT_KIND_ID;
+  const previousSettings = clean.settings || {};
   clean.settings = {
-    theme: ["light", "dark"].includes(clean.settings?.theme) ? clean.settings.theme : "light",
+    theme: ["light", "dark"].includes(previousSettings.theme) ? previousSettings.theme : "light",
     background: [
       "pastel-mint",
       "calm",
@@ -607,15 +610,16 @@ function sanitizeState(nextState) {
       "nebula",
       "starfield",
       "ocean",
-    ].includes(clean.settings?.background)
-      ? clean.settings.background
+    ].includes(previousSettings.background)
+      ? previousSettings.background
       : "calm",
-    lineThickness: clamp(Number(clean.settings?.lineThickness) || 2.5, 1, 8),
-    connectionType: ["straight", "curve"].includes(clean.settings?.connectionType)
-      ? clean.settings.connectionType
+    calmMode: typeof previousSettings.calmMode === "boolean" ? previousSettings.calmMode : previousSettings.background === "calm",
+    lineThickness: clamp(Number(previousSettings.lineThickness) || 2.5, 1, 8),
+    connectionType: ["straight", "curve"].includes(previousSettings.connectionType)
+      ? previousSettings.connectionType
       : "curve",
-    lineEndpoint: ["floating", "touching"].includes(clean.settings?.lineEndpoint)
-      ? clean.settings.lineEndpoint
+    lineEndpoint: ["floating", "touching"].includes(previousSettings.lineEndpoint)
+      ? previousSettings.lineEndpoint
       : "floating",
   };
   clean.thoughts = clean.thoughts.map((thought, index) => ({
@@ -724,6 +728,14 @@ function bindEvents() {
     pushHistory();
     state.settings.lineEndpoint = els.lineEndpointInput.value;
     applySettings();
+    renderGraph();
+    persistState();
+  });
+  els.calmModeInput.addEventListener("change", () => {
+    pushHistory();
+    state.settings.calmMode = els.calmModeInput.checked;
+    applySettings();
+    focusPositions = computeFocusPositions(state.selectedId);
     renderGraph();
     persistState();
   });
@@ -959,6 +971,7 @@ function applySettings() {
   els.lineThicknessValue.textContent = `${state.settings.lineThickness.toFixed(1)} px`;
   els.connectionTypeInput.value = state.settings.connectionType;
   els.lineEndpointInput.value = state.settings.lineEndpoint;
+  els.calmModeInput.checked = Boolean(state.settings.calmMode);
 }
 
 function getColourSchemeId(theme, background) {
@@ -1315,7 +1328,10 @@ function renderGraph() {
 
   const positions = getVisualPositions();
   const graphFocusId = getGraphFocusId();
-  const activeIds = new Set(getFocusFamilyIds(graphFocusId));
+  const directFocusIds = new Set(getDirectFocusFamilyIds(graphFocusId));
+  const secondaryFocusIds = new Set(getSecondaryFocusFamilyIds(graphFocusId));
+  const visibleFocusIds = new Set(getFocusFamilyIds(graphFocusId));
+  const hiddenFocusIds = new Set(isCalmMode() ? secondaryFocusIds : []);
   const previewId = hoverThoughtId && hoverThoughtId !== graphFocusId ? hoverThoughtId : null;
   const previewIds = new Set(getPreviewFamilyIds(previewId));
   const linkRenderItems = [
@@ -1335,11 +1351,12 @@ function renderGraph() {
       const from = getGraphRenderThought(link.from);
       const to = getGraphRenderThought(link.to);
       if (!from || !to) return null;
+      if (hiddenFocusIds.has(link.from) || hiddenFocusIds.has(link.to)) return null;
       const fromPos = positions.get(from.id) || from;
       const toPos = positions.get(to.id) || to;
       const isActiveLink = link.from === state.selectedId || link.to === state.selectedId;
       const isSelectedLink = link.id === selectedLinkId;
-      const isFocusLink = activeIds.has(link.from) && activeIds.has(link.to);
+      const isFocusLink = visibleFocusIds.has(link.from) && visibleFocusIds.has(link.to);
       const isPreviewLink = previewId && previewIds.has(link.from) && previewIds.has(link.to);
       const isAppearing = effect === "appearing";
       const isLeaving = effect === "leaving";
@@ -1418,11 +1435,13 @@ function renderGraph() {
 
   const nodeElements = getGraphRenderThoughts()
     .map((thought) => {
+      if (hiddenFocusIds.has(thought.id)) return null;
       const thoughtEffect = graphEffects.dimThoughts.get(thought.id);
       const position = thoughtEffect?.position || positions.get(thought.id) || thought;
       const isActive = thought.id === graphFocusId;
-      const isConnected = activeIds.has(thought.id) && !isActive;
-      const isDimmed = graphFocusId && !activeIds.has(thought.id);
+      const isConnected = directFocusIds.has(thought.id) && !isActive;
+      const isSecondaryFocus = secondaryFocusIds.has(thought.id);
+      const isDimmed = graphFocusId && (!directFocusIds.has(thought.id) || isSecondaryFocus);
       const isPreview = thought.id === previewId;
       const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
       const isDeleting = thoughtEffect?.mode === "deleting";
@@ -1502,6 +1521,7 @@ function renderGraph() {
       const priority = isActive ? 4 : isPreview ? 3 : isConnected || isPreviewRelated ? 2 : isDimmed ? 0 : 1;
       return { element: group, priority };
     })
+    .filter(Boolean)
     .sort((a, b) => a.priority - b.priority)
     .map((item) => item.element);
   els.nodesLayer.replaceChildren(...nodeElements);
@@ -1989,130 +2009,103 @@ function computeFocusPositions(selectedId = state.selectedId) {
   const selected = getThought(selectedId);
   if (!selected) return positions;
 
-  const ancestorEntries = getAncestorEntries(selectedId, 2);
-  const descendantEntries = getDescendantEntries(selectedId, 3);
-  const parents = ancestorEntries.filter((entry) => entry.depth === 1).map((entry) => entry.thought);
-  const children = descendantEntries.filter((entry) => entry.depth === 1).map((entry) => entry.thought);
-  const siblings = getSiblingThoughts(selectedId);
-  const directIds = new Set([
-    selectedId,
-    ...ancestorEntries.map((entry) => entry.thought.id),
-    ...descendantEntries.map((entry) => entry.thought.id),
-  ]);
-  const visibleSiblings = siblings.filter((thought) => !directIds.has(thought.id));
-  const layerGap = 245;
-
+  const parents = getParentThoughts(selectedId);
+  const children = getChildThoughts(selectedId);
+  const related = getRelatedThoughts(selectedId);
+  const directIds = new Set([selectedId, ...parents.map((thought) => thought.id), ...children.map((thought) => thought.id), ...related.map((thought) => thought.id)]);
+  const siblings = getSiblingThoughts(selectedId).filter((thought) => !directIds.has(thought.id));
+  const secondAncestors = getAncestorEntries(selectedId, 2)
+    .filter((entry) => entry.depth > 1 && !directIds.has(entry.thought.id))
+    .map((entry) => entry.thought);
+  const secondDescendants = getDescendantEntries(selectedId, 2)
+    .filter((entry) => entry.depth > 1 && !directIds.has(entry.thought.id))
+    .map((entry) => entry.thought);
+  const parentRelated = getParentRelatedContextEntries(selectedId, directIds);
+  const selectedBox = getNodeBox(selected.id);
+  const verticalGap = isMobileLayout() ? 170 : 210;
+  const sideGap = isMobileLayout() ? 74 : 94;
+  const secondaryGap = isMobileLayout() ? 138 : 168;
+  const rowGap = isMobileLayout() ? 24 : 34;
   positions.set(selected.id, { x: selected.x, y: selected.y });
 
-  groupByDepth(ancestorEntries).forEach((entries, depth) => {
-    arrangeFocusLayer(positions, entries, selected, selected.y - depth * layerGap, {
-      spacing: depth === 1 ? 220 : 190,
-      relation: "ancestor",
-    });
+  arrangeHorizontalThoughtRow(positions, parents, selected.x, selected.y - verticalGap, { gap: rowGap });
+  arrangeVerticalThoughtColumn(positions, related, selected.x - selectedBox.width / 2 - sideGap, selected.y, {
+    gap: rowGap,
+    side: "left",
   });
+  arrangeVerticalThoughtColumn(positions, siblings, selected.x + selectedBox.width / 2 + sideGap, selected.y, {
+    gap: rowGap,
+    side: "right",
+  });
+  arrangeHorizontalThoughtRow(positions, children, selected.x, selected.y + verticalGap, { gap: rowGap });
 
-  if (visibleSiblings.length) {
-    arrangeSiblingShelf(positions, selected, visibleSiblings);
+  if (!isCalmMode()) {
+    arrangeParentRelatedContext(positions, parentRelated, {
+      gap: rowGap,
+      sideGap: Math.max(44, sideGap * 0.72),
+    });
+    arrangeHorizontalThoughtRow(positions, uniqueThoughts(secondAncestors), selected.x, selected.y - verticalGap - secondaryGap, {
+      gap: rowGap,
+    });
+    arrangeHorizontalThoughtRow(positions, uniqueThoughts(secondDescendants), selected.x, selected.y + verticalGap + secondaryGap, {
+      gap: rowGap,
+    });
   }
 
-  groupByDepth(descendantEntries).forEach((entries, depth) => {
-    arrangeFocusLayer(positions, entries, selected, selected.y + depth * layerGap, {
-      spacing: depth === 1 ? 220 : 185,
-      relation: "descendant",
-    });
-  });
-
-  if (!parents.length && !children.length && !visibleSiblings.length) {
+  if (!parents.length && !children.length && !siblings.length && !related.length) {
     positions.set(selected.id, { x: selected.x, y: selected.y });
   }
   return positions;
 }
 
-function arrangeFocusLayer(positions, entries, selected, y, options = {}) {
+function arrangeHorizontalThoughtRow(positions, thoughts, centerX, y, options = {}) {
+  if (!thoughts.length) return;
+  const gap = options.gap ?? 34;
+  const ordered = [...thoughts].sort((a, b) => a.x - b.x || a.title.localeCompare(b.title));
+  const widths = ordered.map((thought) => getNodeBox(thought.id).width);
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0) + gap * Math.max(ordered.length - 1, 0);
+  let cursor = centerX - totalWidth / 2;
+  ordered.forEach((thought, index) => {
+    const width = widths[index];
+    positions.set(thought.id, { x: cursor + width / 2, y });
+    cursor += width + gap;
+  });
+}
+
+function arrangeVerticalThoughtColumn(positions, thoughts, edgeX, centerY, options = {}) {
+  if (!thoughts.length) return;
+  const gap = options.gap ?? 34;
+  const side = options.side || "left";
+  const ordered = [...thoughts].sort((a, b) => a.y - b.y || a.title.localeCompare(b.title));
+  const boxes = ordered.map((thought) => getNodeBox(thought.id));
+  const totalHeight = boxes.reduce((sum, box) => sum + box.height, 0) + gap * Math.max(ordered.length - 1, 0);
+  let cursor = centerY - totalHeight / 2;
+  ordered.forEach((thought, index) => {
+    const box = boxes[index];
+    const x = side === "left" ? edgeX - box.width / 2 : edgeX + box.width / 2;
+    positions.set(thought.id, { x, y: cursor + box.height / 2 });
+    cursor += box.height + gap;
+  });
+}
+
+function arrangeParentRelatedContext(positions, entries, options = {}) {
   if (!entries.length) return;
-  const spacing = options.spacing || 190;
-  const relation = options.relation || "descendant";
-  const groups = new Map();
+  const byParent = new Map();
   entries.forEach((entry) => {
-    const anchorId = relation === "ancestor" ? entry.childId : entry.parentId;
-    if (!groups.has(anchorId)) groups.set(anchorId, []);
-    groups.get(anchorId).push(entry);
+    if (!byParent.has(entry.parentId)) byParent.set(entry.parentId, []);
+    byParent.get(entry.parentId).push(entry.thought);
   });
 
-  const layout = [];
-  groups.forEach((group, anchorId) => {
-    const anchor = positions.get(anchorId) || getThought(anchorId) || selected;
-    const sorted = [...group].sort((a, b) => a.thought.x - b.thought.x || a.thought.title.localeCompare(b.thought.title));
-    sorted.forEach((entry, index) => {
-      layout.push({
-        entry,
-        idealX: anchor.x + (index - (sorted.length - 1) / 2) * spacing,
-      });
+  byParent.forEach((thoughts, parentId) => {
+    const parent = getThought(parentId);
+    const parentPosition = positions.get(parentId) || parent;
+    if (!parent || !parentPosition) return;
+    const parentBox = getNodeBox(parentId);
+    arrangeVerticalThoughtColumn(positions, uniqueThoughts(thoughts), parentPosition.x - parentBox.width / 2 - (options.sideGap ?? 68), parentPosition.y, {
+      gap: options.gap ?? 34,
+      side: "left",
     });
   });
-
-  resolveLayerCollisions(layout, spacing);
-  layout.forEach(({ entry, x }) => {
-    positions.set(entry.thought.id, { x, y });
-  });
-}
-
-function resolveLayerCollisions(layout, spacing) {
-  layout.sort((a, b) => a.idealX - b.idealX || a.entry.thought.title.localeCompare(b.entry.thought.title));
-  layout.forEach((item, index) => {
-    item.x = index === 0 ? item.idealX : Math.max(item.idealX, layout[index - 1].x + spacing);
-  });
-
-  for (let index = layout.length - 2; index >= 0; index -= 1) {
-    layout[index].x = Math.min(layout[index].x, layout[index + 1].x - spacing);
-  }
-}
-
-function groupByDepth(entries) {
-  const groups = new Map();
-  entries.forEach((entry) => {
-    if (!groups.has(entry.depth)) groups.set(entry.depth, []);
-    groups.get(entry.depth).push(entry);
-  });
-  return groups;
-}
-
-function arrangeSiblingShelf(positions, selected, siblings) {
-  if (!siblings.length) return;
-  const peers = getPeerThoughtsInOrder(selected.id, siblings);
-  const selectedIndex = Math.max(peers.findIndex((thought) => thought.id === selected.id), 0);
-  const selectedBox = getNodeBox(selected.id);
-  const sideGap = 76;
-  const itemGap = 30;
-  const rowY = selected.y + selectedBox.height / 2 + 118;
-  const left = [];
-  const right = [];
-
-  siblings.forEach((thought) => {
-    const index = peers.findIndex((peer) => peer.id === thought.id);
-    const target = index >= 0 && index < selectedIndex ? left : right;
-    target.push(thought);
-  });
-
-  let cursor = selected.x - selectedBox.width / 2 - sideGap;
-  left
-    .sort((a, b) => b.x - a.x || a.title.localeCompare(b.title))
-    .forEach((thought) => {
-      const box = getNodeBox(thought.id);
-      const x = cursor - box.width / 2;
-      positions.set(thought.id, { x, y: rowY });
-      cursor = x - box.width / 2 - itemGap;
-    });
-
-  cursor = selected.x + selectedBox.width / 2 + sideGap;
-  right
-    .sort((a, b) => a.x - b.x || a.title.localeCompare(b.title))
-    .forEach((thought) => {
-      const box = getNodeBox(thought.id);
-      const x = cursor + box.width / 2;
-      positions.set(thought.id, { x, y: rowY });
-      cursor = x + box.width / 2 + itemGap;
-    });
 }
 
 function getVisualPositions() {
@@ -2224,27 +2217,61 @@ function getSiblingThoughts(id) {
   return [...siblingIds].map(getThought).filter(Boolean);
 }
 
-function getPeerThoughtsInOrder(id, siblings) {
-  const peers = new Map();
+function getParentRelatedContextEntries(id, directIds = new Set(getDirectFocusFamilyIds(id))) {
+  const entries = [];
+  const seen = new Set();
   getParentThoughts(id).forEach((parent) => {
-    getChildThoughts(parent.id).forEach((child) => peers.set(child.id, child));
+    getRelatedThoughts(parent.id).forEach((thought) => {
+      if (!thought || directIds.has(thought.id) || seen.has(thought.id)) return;
+      seen.add(thought.id);
+      entries.push({ parentId: parent.id, thought });
+    });
   });
-  peers.set(id, getThought(id));
-  siblings.forEach((thought) => peers.set(thought.id, thought));
-  return [...peers.values()].filter(Boolean).sort((a, b) => a.x - b.x);
+  return entries;
 }
 
 function getFocusFamilyIds(id) {
   if (!id) return [];
   return uniqueThoughts([
-    getThought(id),
-    ...getAncestorEntries(id, 2).map((entry) => entry.thought),
-    ...getDescendantEntries(id, 3).map((entry) => entry.thought),
-    ...getSiblingThoughts(id),
-    ...getRelatedThoughts(id),
+    ...getDirectFocusThoughts(id),
+    ...(isCalmMode() ? [] : getSecondaryFocusThoughts(id)),
   ])
     .filter(Boolean)
     .map((thought) => thought.id);
+}
+
+function getDirectFocusFamilyIds(id) {
+  if (!id) return [];
+  return getDirectFocusThoughts(id).map((thought) => thought.id);
+}
+
+function getSecondaryFocusFamilyIds(id) {
+  if (!id) return [];
+  return getSecondaryFocusThoughts(id).map((thought) => thought.id);
+}
+
+function getDirectFocusThoughts(id) {
+  return uniqueThoughts([
+    getThought(id),
+    ...getParentThoughts(id),
+    ...getChildThoughts(id),
+    ...getRelatedThoughts(id),
+    ...getSiblingThoughts(id),
+  ])
+    .filter(Boolean);
+}
+
+function getSecondaryFocusThoughts(id) {
+  const directIds = new Set(getDirectFocusFamilyIds(id));
+  return uniqueThoughts([
+    ...getAncestorEntries(id, 2)
+      .filter((entry) => entry.depth > 1)
+      .map((entry) => entry.thought),
+    ...getDescendantEntries(id, 2)
+      .filter((entry) => entry.depth > 1)
+      .map((entry) => entry.thought),
+    ...getParentRelatedContextEntries(id, directIds).map((entry) => entry.thought),
+  ]).filter((thought) => thought && !directIds.has(thought.id));
 }
 
 function getPreviewFamilyIds(id) {
@@ -2261,6 +2288,10 @@ function uniqueThoughts(thoughts) {
     seen.add(thought.id);
     return true;
   });
+}
+
+function isCalmMode() {
+  return Boolean(state.settings.calmMode);
 }
 
 function getConnections(id) {

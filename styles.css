@@ -2089,6 +2089,19 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   text-transform: none;
 }
 
+.toggle-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 40px;
+}
+
+.toggle-field input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
 .field-notes {
   min-height: 0;
 }

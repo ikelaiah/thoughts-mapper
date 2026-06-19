@@ -177,6 +177,7 @@ export type AppElements = {
   resetButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
   settingsMenuButton: HTMLButtonElement;
+  stagePrompt: HTMLElement;
   settingsPage: HTMLElement;
   settingsCloseButton: HTMLButtonElement;
   mobileManagement: HTMLElement;
@@ -213,7 +214,8 @@ export type AppElements = {
   noteInput: HTMLTextAreaElement;
   notePreview: HTMLElement;
   linkForm: HTMLFormElement;
-  linkTargetInput: HTMLSelectElement;
+  linkTargetInput: HTMLInputElement;
+  linkTargetOptions: HTMLDataListElement;
   linkRelationInput: HTMLSelectElement;
   linkSubmitButton: HTMLButtonElement;
   linkPreviewText: HTMLElement;

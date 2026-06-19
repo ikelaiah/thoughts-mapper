@@ -136,6 +136,7 @@ const els: AppElements = {
   resetButton: qs("#resetButton"),
   settingsButton: qs("#settingsButton"),
   settingsMenuButton: qs("#settingsMenuButton"),
+  stagePrompt: qs("#stagePrompt"),
   settingsPage: qs("#settingsPage"),
   settingsCloseButton: qs("#settingsCloseButton"),
   mobileManagement: qs("#mobileManagement"),
@@ -173,6 +174,7 @@ const els: AppElements = {
   notePreview: qs("#notePreview"),
   linkForm: qs("#linkForm"),
   linkTargetInput: qs("#linkTargetInput"),
+  linkTargetOptions: qs("#linkTargetOptions"),
   linkRelationInput: qs("#linkRelationInput"),
   linkSubmitButton: qs("#linkSubmitButton"),
   linkPreviewText: qs("#linkPreviewText"),
@@ -610,7 +612,9 @@ function bindEvents() {
     },
     onLinkSubmit: (event) => {
       event.preventDefault();
-      addLink(state.selectedId, els.linkTargetInput.value, els.linkRelationInput.value as LinkRelation);
+      const target = resolveLinkTarget(els.linkTargetInput.value);
+      addLink(state.selectedId, target?.id || null, els.linkRelationInput.value as LinkRelation);
+      if (target) els.linkTargetInput.value = "";
     },
     renderRelationshipPreviews,
     placeInboxThought,
@@ -1054,6 +1058,7 @@ function renderDetails() {
   const selected = getSelectedThought();
   els.detailsEmpty.hidden = Boolean(selected);
   els.detailsPanel.hidden = !selected;
+  els.stagePrompt.hidden = Boolean(selected);
   if (!selected) return;
 
   const selectedKind = getKindDefinition(selected.kind);
@@ -1068,18 +1073,19 @@ function renderDetails() {
     showNotePreview(selected.note);
   }
 
-  const candidates = state.thoughts.filter((thought) => thought.id !== selected.id);
-  const linkTargetId = els.linkTargetInput.value;
+  const candidates = state.thoughts.filter((thought) => thought.id !== selected.id).sort((a, b) => a.title.localeCompare(b.title));
+  const linkTargetValue = els.linkTargetInput.value;
   const placeTargetId = els.placeTargetInput.value;
-  els.linkTargetInput.replaceChildren(
+  els.linkTargetOptions.replaceChildren(
     ...candidates.map((thought) => {
       const option = document.createElement("option");
-      option.value = thought.id;
-      option.textContent = thought.title;
+      option.value = thought.title;
+      option.label = getKindName(thought.kind);
+      option.dataset.id = thought.id;
       return option;
     }),
   );
-  if (candidates.some((thought) => thought.id === linkTargetId)) els.linkTargetInput.value = linkTargetId;
+  if (linkTargetValue && !resolveLinkTarget(linkTargetValue, candidates)) els.linkTargetInput.value = "";
   els.placeTargetInput.replaceChildren(
     ...candidates.map((thought) => {
       const option = document.createElement("option");
@@ -1127,8 +1133,8 @@ function renderDetails() {
       const unlinkButton = document.createElement("button");
       unlinkButton.className = "connection-unlink";
       unlinkButton.type = "button";
-      unlinkButton.textContent = "Unlink";
-      unlinkButton.title = `Unlink ${selected.title} and ${thought.title}`;
+      unlinkButton.textContent = "Remove";
+      unlinkButton.title = `Remove the connection between ${selected.title} and ${thought.title}`;
       unlinkButton.addEventListener("click", () => removeConnection(linkId));
 
       item.append(openButton, unlinkButton);
@@ -1142,7 +1148,7 @@ function renderKindInspector(selected) {
   const options = state.kinds.map((kind) => optionElement(kind.id, kind.name));
   const divider = optionElement("", "──────────");
   divider.disabled = true;
-  els.kindInput.replaceChildren(...options, divider, optionElement(NEW_KIND_VALUE, "+ New kind"));
+  els.kindInput.replaceChildren(...options, divider, optionElement(NEW_KIND_VALUE, "+ New type"));
   els.kindInput.value = selected.kind;
   const kind = getKindDefinition(selected.kind);
   els.kindColorInput.value = kind.color;
@@ -1178,7 +1184,7 @@ function renderKindSettings() {
       nameInput.type = "text";
       nameInput.maxLength = 32;
       nameInput.value = kind.name;
-      nameInput.setAttribute("aria-label", "Kind name");
+      nameInput.setAttribute("aria-label", "Type name");
       nameInput.addEventListener("change", () => renameKind(kind.id, nameInput.value));
 
       const upButton = document.createElement("button");
@@ -1227,7 +1233,6 @@ function renderGraph() {
     getGraphRenderThoughts,
     getGraphRenderNodeBox,
     getLinkDirectionText,
-    getLinkLabel,
     getKindName,
     getKindColor,
     isCalmMode,
@@ -1452,8 +1457,8 @@ function getFocusView(id, positions = computeFocusPositions(id)) {
   const selected = getThought(id);
   if (!selected) return null;
   const focusIds = getFocusFamilyIds(id);
-  const paddingX = 240;
-  const paddingY = 190;
+  const paddingX = 180;
+  const paddingY = 145;
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -1478,7 +1483,7 @@ function getFocusView(id, positions = computeFocusPositions(id)) {
   maxY += paddingY;
   const width = Math.max(maxX - minX, 1);
   const height = Math.max(maxY - minY, 1);
-  const scale = clamp(Math.min(graphRect.width / width, graphRect.height / height), 0.48, 1.15);
+  const scale = clamp(Math.min(graphRect.width / width, graphRect.height / height), 0.5, 1.35);
   return {
     scale,
     x: -((minX + maxX) / 2) * scale,
@@ -1693,20 +1698,13 @@ function getVisualPositions() {
   return focusPositions || computeFocusPositions(state.selectedId);
 }
 
-function getLinkLabel(link) {
-  if (link.type === "related") return "related";
-  if (link.from === state.selectedId) return "parent -> child";
-  if (link.to === state.selectedId) return "parent <- child";
-  return "parent -> child";
-}
-
 function getLinkDirectionText(link) {
-  return link.type === "related" ? "is related to" : "is parent of";
+  return link.type === "related" ? "connects with" : "sits above";
 }
 
 function getConnectionRoleLabel(role) {
-  if (role === "related") return "Related";
-  return role === "parent" ? "Parent" : "Child";
+  if (role === "related") return "Beside";
+  return role === "parent" ? "Above" : "Below";
 }
 
 function getParentThoughts(id) {
@@ -1940,7 +1938,7 @@ function getDefaultKindId() {
 }
 
 function createKindFromPrompt(options: CreateKindOptions = {}) {
-  const name = window.prompt("New kind name", "Thought");
+  const name = window.prompt("New type name", "Thought");
   if (!name) {
     const selected = getSelectedThought();
     if (selected) renderKindInspector(selected);
@@ -2120,6 +2118,12 @@ function optionElement(value, text) {
   return option;
 }
 
+function resolveLinkTarget(value: string, candidates = state.thoughts.filter((thought) => thought.id !== state.selectedId)): Thought | null {
+  const query = value.trim().toLowerCase();
+  if (!query) return null;
+  return candidates.find((thought) => thought.id === value || thought.title.toLowerCase() === query) || null;
+}
+
 function renderRelationshipPreviews() {
   renderLinkPreview();
   renderPlacePreview();
@@ -2128,16 +2132,19 @@ function renderRelationshipPreviews() {
 
 function renderLinkPreview() {
   const selected = getSelectedThought();
-  const target = getThought(els.linkTargetInput.value);
+  const target = resolveLinkTarget(els.linkTargetInput.value);
   const selectedName = selected ? trimLabel(selected.title, 28) : "selected thought";
   setRelationOptionText(els.linkRelationInput, {
-    "parent-of": `Add as child of ${selectedName}`,
-    "child-of": `Make parent of ${selectedName}`,
-    related: `Relate to ${selectedName}`,
+    "parent-of": "Add below",
+    "child-of": "Place above",
+    related: "Connect beside",
   });
+  els.linkSubmitButton.disabled = !selected || !target;
   els.linkPreviewText.textContent = selected && target
     ? describeTargetRelation(selected, target, els.linkRelationInput.value as LinkRelation)
-    : "Choose another thought to connect.";
+    : selected
+      ? `Search for a thought to connect with ${selectedName}.`
+      : "Search for a thought to connect.";
 }
 
 function renderPlacePreview() {
@@ -2145,9 +2152,9 @@ function renderPlacePreview() {
   const target = getThought(els.placeTargetInput.value);
   const targetName = target ? trimLabel(target.title, 28) : "selected thought";
   setRelationOptionText(els.placeRelationInput, {
-    "child-of": `Add as child of ${targetName}`,
-    "parent-of": `Make parent of ${targetName}`,
-    related: `Relate to ${targetName}`,
+    "child-of": `Place below ${targetName}`,
+    "parent-of": `Place above ${targetName}`,
+    related: `Connect beside ${targetName}`,
   });
   els.placePreviewText.textContent = selected && target
     ? describeActiveRelation(selected, target, els.placeRelationInput.value as LinkRelation)
@@ -2158,9 +2165,9 @@ function renderInboxReviewPreview() {
   const current = getCurrentInboxReviewThought();
   const target = getThought(els.inboxReviewTargetInput.value);
   const targetName = target ? trimLabel(target.title, 22) : "selected thought";
-  els.inboxReviewChildButton.textContent = `Add as child of ${targetName}`;
-  els.inboxReviewParentButton.textContent = `Make parent of ${targetName}`;
-  els.inboxReviewRelatedButton.textContent = `Relate to ${targetName}`;
+  els.inboxReviewChildButton.textContent = `Place below ${targetName}`;
+  els.inboxReviewParentButton.textContent = `Place above ${targetName}`;
+  els.inboxReviewRelatedButton.textContent = `Connect beside ${targetName}`;
   els.inboxReviewChildButton.title = current && target ? describeActiveRelation(current, target, "child-of") : "";
   els.inboxReviewParentButton.title = current && target ? describeActiveRelation(current, target, "parent-of") : "";
   els.inboxReviewRelatedButton.title = current && target ? describeActiveRelation(current, target, "related") : "";
@@ -2177,15 +2184,15 @@ function setRelationOptionText(select: HTMLSelectElement, labels: Partial<Record
 }
 
 function describeTargetRelation(active: Thought, target: Thought, relation: LinkRelation) {
-  if (relation === "child-of") return `${target.title} will become the parent of ${active.title}.`;
-  if (relation === "related") return `${target.title} and ${active.title} will be related.`;
-  return `${target.title} will become a child of ${active.title}.`;
+  if (relation === "child-of") return `${target.title} will sit above ${active.title}.`;
+  if (relation === "related") return `${target.title} will connect beside ${active.title}.`;
+  return `${target.title} will sit below ${active.title}.`;
 }
 
 function describeActiveRelation(active: Thought, target: Thought, relation: LinkRelation) {
-  if (relation === "child-of") return `${active.title} will become a child of ${target.title}.`;
-  if (relation === "related") return `${active.title} and ${target.title} will be related.`;
-  return `${active.title} will become the parent of ${target.title}.`;
+  if (relation === "child-of") return `${active.title} will sit below ${target.title}.`;
+  if (relation === "related") return `${active.title} will connect beside ${target.title}.`;
+  return `${active.title} will sit above ${target.title}.`;
 }
 
 function openInboxReview() {
@@ -2445,7 +2452,7 @@ function fitToGraph() {
 function getFitView() {
   const graphThoughts = getGraphThoughts();
   if (!graphThoughts.length) return null;
-  const padding = 170;
+  const padding = 115;
   const xs = graphThoughts.map((thought) => thought.x);
   const ys = graphThoughts.map((thought) => thought.y);
   const minX = Math.min(...xs) - padding;
@@ -2454,7 +2461,7 @@ function getFitView() {
   const maxY = Math.max(...ys) + padding;
   const width = maxX - minX;
   const height = maxY - minY;
-  const scale = clamp(Math.min(graphRect.width / width, graphRect.height / height), 0.45, 1.45);
+  const scale = clamp(Math.min(graphRect.width / width, graphRect.height / height), 0.5, 1.7);
   return {
     scale,
     x: -((minX + maxX) / 2) * scale,
@@ -2550,15 +2557,15 @@ function renderPanelState() {
     els.detailsToggleButton.textContent = "i";
     els.detailsToggleButton.title = mobileDetailsOpen ? "Close thought details" : "Open thought details";
     els.fitButton.textContent = "⛶";
-    els.moreButton.textContent = "⋯";
+    els.moreButton.textContent = "...";
   } else {
-    els.sidebarToggleButton.textContent = sidebarHidden ? "Show list" : "Hide list";
+    els.sidebarToggleButton.textContent = "☰";
     els.sidebarToggleButton.title = sidebarHidden ? "Show thoughts sidebar" : "Hide thoughts sidebar";
-    els.detailsToggleButton.textContent = detailsHidden ? "Show details" : "Hide details";
+    els.detailsToggleButton.textContent = "i";
     els.detailsToggleButton.title = detailsHidden ? "Show thought details" : "Hide thought details";
     els.fitButton.textContent = "Fit";
     els.settingsButton.textContent = "Settings";
-    els.moreButton.textContent = "More";
+    els.moreButton.textContent = "...";
   }
 
   els.sidebarToggleButton.setAttribute("aria-label", els.sidebarToggleButton.title);
@@ -2782,8 +2789,8 @@ function renderLinkEditForm(link = getLink(contextLinkId)) {
   const to = getThought(link.to);
   if (!from || !to) return;
   els.linkNameInput.value = link.name || "";
-  els.linkDirectionInput.options[0].textContent = `${from.title} parent of ${to.title}`;
-  els.linkDirectionInput.options[1].textContent = `${to.title} parent of ${from.title}`;
+  els.linkDirectionInput.options[0].textContent = `${from.title} above ${to.title}`;
+  els.linkDirectionInput.options[1].textContent = `${to.title} above ${from.title}`;
   els.linkDirectionInput.value = link.type === "related" ? "related" : "parent-forward";
   els.linkKeepInput.replaceChildren(optionElement(from.id, `Keep ${from.title}`), optionElement(to.id, `Keep ${to.title}`));
   els.linkKeepInput.value = [link.from, link.to].includes(state.selectedId) ? state.selectedId : link.from;

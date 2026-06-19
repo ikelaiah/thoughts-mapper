@@ -498,10 +498,10 @@ textarea {
   justify-content: space-between;
   gap: 10px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 650;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .thought-list {
@@ -570,16 +570,59 @@ textarea {
 }
 
 .sidebar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  position: relative;
   margin-top: auto;
 }
 
-.sidebar-actions > button,
-.sidebar-actions > .file-button {
-  flex: 1 1 86px;
+.data-actions summary {
+  display: grid;
+  place-items: center;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  list-style: none;
+}
+
+.data-actions summary::-webkit-details-marker {
+  display: none;
+}
+
+.data-actions summary::after {
+  content: "...";
+  margin-left: 8px;
+  color: var(--muted);
+}
+
+.data-action-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 5;
+  display: grid;
+  min-width: 180px;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.data-actions:not([open]) .data-action-menu {
+  display: none;
+}
+
+.data-action-menu button,
+.data-action-menu .file-button {
+  justify-content: flex-start;
+  width: 100%;
   min-width: 0;
+  text-align: left;
 }
 
 .mobile-panel-close,
@@ -636,6 +679,28 @@ body[data-background="calm"] .map-stage {
   -webkit-user-select: none;
 }
 
+.stage-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 9vh;
+  z-index: 3;
+  max-width: min(360px, calc(100% - 32px));
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 64%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-glass) 62%, transparent);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.stage-prompt[hidden] {
+  display: none;
+}
+
 .ambient-layer {
   position: absolute;
   inset: 0;
@@ -679,6 +744,16 @@ body[data-background="calm"] .map-stage {
 .stage-toolbar button {
   min-height: 34px;
   padding: 0 10px;
+}
+
+.stage-toolbar .toolbar-icon-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  color: var(--muted);
+  font-weight: 760;
 }
 
 .stage-toolbar button.active {
@@ -825,7 +900,7 @@ body[data-background="calm"] .map-stage {
   stroke: var(--stage-bg);
   stroke-width: 5px;
   stroke-linejoin: round;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .relation-label.active {
@@ -950,7 +1025,7 @@ body[data-background="calm"] .map-stage {
   font-size: 10px;
   text-anchor: middle;
   dominant-baseline: central;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 body[data-background="fireflies"] .ambient-layer {
@@ -2091,11 +2166,11 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   min-height: 30px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(47, 143, 131, 0.12);
-  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 760;
-  text-transform: uppercase;
+  font-weight: 650;
+  text-transform: none;
 }
 
 .tag-strip {
@@ -2127,9 +2202,9 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 730;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  font-weight: 640;
+  text-transform: none;
 }
 
 .field input,
@@ -2393,17 +2468,40 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
 .link-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px 0 0;
   border: 1px solid var(--line);
+  border-width: 1px 0 0;
   border-radius: var(--radius);
-  background: rgba(76, 127, 184, 0.08);
+  background: transparent;
 }
 
-.link-form button {
+.link-search-field {
+  gap: 6px;
+}
+
+.link-inline-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.link-inline-row select {
+  height: 38px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.link-inline-row button {
+  min-width: 92px;
   background: #20344f;
   border-color: #20344f;
   color: white;
+}
+
+body[data-theme="dark"] .link-inline-row button {
+  background: color-mix(in srgb, var(--accent) 36%, #17202a);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
 }
 
 .connection-list {
@@ -2458,15 +2556,24 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
 .connection-unlink {
   min-height: 28px;
   padding: 0 8px;
-  border-color: color-mix(in srgb, var(--danger) 34%, var(--line));
+  border-color: transparent;
   background: transparent;
-  color: var(--danger);
+  color: var(--muted);
   font-size: 12px;
+  opacity: 0;
+  transform: none;
+}
+
+.connection-row:hover .connection-unlink,
+.connection-row:focus-within .connection-unlink {
+  opacity: 1;
 }
 
 .connection-unlink:hover {
   background: color-mix(in srgb, var(--danger) 12%, transparent);
   border-color: color-mix(in srgb, var(--danger) 58%, var(--line));
+  color: var(--danger);
+  transform: none;
 }
 
 .relation-badge {
@@ -2543,8 +2650,8 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
 .inbox-review-current span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 730;
-  text-transform: uppercase;
+  font-weight: 640;
+  text-transform: none;
 }
 
 .inbox-review-actions {
@@ -2588,8 +2695,8 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
 .context-title {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 760;
-  text-transform: uppercase;
+  font-weight: 650;
+  text-transform: none;
 }
 
 .context-actions {
@@ -2691,8 +2798,8 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   margin: 0;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 760;
-  text-transform: uppercase;
+  font-weight: 650;
+  text-transform: none;
 }
 
 .kind-list {
@@ -2970,7 +3077,7 @@ input[type="range"] {
   .mobile-sheet-bar strong {
     padding-top: 8px;
     font-size: 13px;
-    text-transform: uppercase;
+    text-transform: none;
     color: var(--muted);
   }
 
@@ -3136,8 +3243,13 @@ input[type="range"] {
   }
 
   .mobile-management .sidebar-actions {
-    display: flex;
+    display: block;
     margin-top: 0;
+  }
+
+  .mobile-management .data-action-menu {
+    position: static;
+    margin-top: 8px;
   }
 
   .inbox-review {

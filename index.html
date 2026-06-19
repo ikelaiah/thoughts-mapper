@@ -64,14 +64,17 @@
         </div>
         <nav id="thoughtList" class="thought-list" aria-label="Thought list"></nav>
 
-        <div class="sidebar-actions">
-          <button id="exportButton" type="button" title="Export a full JSON backup">Backup (JSON)</button>
-          <button id="markdownExportButton" type="button" title="Export notes as a Markdown document">Export Notes Only</button>
-          <label class="file-button">
-            Import (JSON)
-            <input id="importInput" type="file" accept="application/json" />
-          </label>
-        </div>
+        <details class="sidebar-actions data-actions">
+          <summary title="Backup, import, and export">Data</summary>
+          <div class="data-action-menu">
+            <button id="exportButton" type="button" title="Export a full JSON backup">Backup JSON</button>
+            <button id="markdownExportButton" type="button" title="Export notes as a Markdown document">Export notes</button>
+            <label class="file-button">
+              Import JSON
+              <input id="importInput" type="file" accept="application/json" />
+            </label>
+          </div>
+        </details>
       </aside>
 
       <div id="leftResizeHandle" class="panel-resize-handle left-resize" role="separator" aria-label="Resize library panel" aria-orientation="vertical" tabindex="0"></div>
@@ -86,11 +89,11 @@
           <span></span>
         </div>
         <div class="stage-toolbar" aria-label="Map tools">
-          <button id="sidebarToggleButton" type="button" title="Hide thoughts sidebar" aria-label="Hide thoughts sidebar">Hide list</button>
-          <button id="detailsToggleButton" type="button" title="Hide thought details" aria-label="Hide thought details">Hide details</button>
+          <button id="sidebarToggleButton" class="toolbar-icon-button" type="button" title="Hide thoughts sidebar" aria-label="Hide thoughts sidebar">☰</button>
+          <button id="detailsToggleButton" class="toolbar-icon-button" type="button" title="Hide thought details" aria-label="Hide thought details">i</button>
           <button id="fitButton" type="button" title="Fit map" aria-label="Fit map">Fit</button>
           <button id="settingsButton" type="button" title="Open settings" aria-label="Open settings">Settings</button>
-          <button id="moreButton" type="button" title="More map tools" aria-label="More map tools">More</button>
+          <button id="moreButton" class="toolbar-icon-button" type="button" title="More map tools" aria-label="More map tools">...</button>
           <div id="moreMenu" class="more-menu" hidden>
             <button id="undoButton" type="button" title="Undo" aria-label="Undo">Undo</button>
             <button id="redoButton" type="button" title="Redo" aria-label="Redo">Redo</button>
@@ -111,6 +114,7 @@
             <g id="nodesLayer"></g>
           </g>
         </svg>
+        <div id="stagePrompt" class="stage-prompt" hidden>Select a thought, or press Ctrl+K to capture.</div>
       </main>
 
       <div id="rightResizeHandle" class="panel-resize-handle right-resize" role="separator" aria-label="Resize details panel" aria-orientation="vertical" tabindex="0"></div>
@@ -135,10 +139,10 @@
 
           <div class="thought-meta-row">
             <label class="field compact-field">
-              <span>Kind</span>
+              <span>Type</span>
               <div class="kind-control">
                 <select id="kindInput"></select>
-                <input id="kindColorInput" type="color" title="Kind colour" aria-label="Kind colour" />
+                <input id="kindColorInput" type="color" title="Type colour" aria-label="Type colour" />
                 <button id="kindDefaultButton" type="button" title="Use this kind by default">Default</button>
               </div>
             </label>
@@ -160,11 +164,11 @@
                 <select id="placeTargetInput" aria-label="Place with thought"></select>
               </label>
               <label class="field compact-field">
-                <span>Relationship</span>
+                <span>Connection</span>
                 <select id="placeRelationInput" aria-label="Placement relation">
-                  <option value="child-of">Add as child</option>
-                  <option value="parent-of">Make parent</option>
-                  <option value="related">Relate</option>
+                  <option value="child-of">Place below</option>
+                  <option value="parent-of">Place above</option>
+                  <option value="related">Connect beside</option>
                 </select>
               </label>
               <button id="placeThoughtButton" type="button">Place thought</button>
@@ -184,23 +188,20 @@
           </div>
 
           <form id="linkForm" class="link-form">
-            <div class="link-copy">
-              <strong>Link another thought</strong>
-              <p id="linkPreviewText">Choose another thought to connect.</p>
-            </div>
-            <label class="field">
-              <span>Other thought</span>
-              <select id="linkTargetInput"></select>
+            <label class="field link-search-field">
+              <span>Connect to...</span>
+              <input id="linkTargetInput" list="linkTargetOptions" type="search" placeholder="Search thoughts" autocomplete="off" />
+              <datalist id="linkTargetOptions"></datalist>
             </label>
-            <label class="field">
-              <span>Relationship</span>
+            <div class="link-inline-row">
               <select id="linkRelationInput">
-                <option value="parent-of">Add as child</option>
-                <option value="child-of">Make parent</option>
-                <option value="related">Relate</option>
+                <option value="parent-of">Add below</option>
+                <option value="child-of">Place above</option>
+                <option value="related">Connect beside</option>
               </select>
-            </label>
-            <button id="linkSubmitButton" type="submit">Create link</button>
+              <button id="linkSubmitButton" type="submit">Connect</button>
+            </div>
+            <p id="linkPreviewText" class="relationship-preview">Search for a thought to connect.</p>
           </form>
 
           <div class="section-heading">
@@ -210,7 +211,7 @@
           <div id="connectionList" class="connection-list"></div>
 
           <div class="section-heading">
-            <span>Backlinks</span>
+            <span>Mentioned by</span>
             <span id="backlinkCount">0</span>
           </div>
           <div id="backlinkList" class="connection-list"></div>
@@ -257,9 +258,9 @@
         </label>
         <p id="inboxReviewPreview" class="relationship-preview">Choose a thought to connect.</p>
         <div class="inbox-review-actions">
-          <button id="inboxReviewChildButton" type="button">Add as child</button>
-          <button id="inboxReviewParentButton" type="button">Make parent</button>
-          <button id="inboxReviewRelatedButton" type="button">Relate</button>
+          <button id="inboxReviewChildButton" type="button">Place below</button>
+          <button id="inboxReviewParentButton" type="button">Place above</button>
+          <button id="inboxReviewRelatedButton" type="button">Connect beside</button>
           <button id="inboxReviewKeepButton" type="button">Skip for now</button>
         </div>
       </div>
@@ -269,10 +270,10 @@
       <form id="nodeCreateForm" class="context-form">
         <div class="context-title">New connected thought</div>
         <input id="nodeCreateInput" type="text" maxlength="80" placeholder="Thought title" autocomplete="off" />
-        <select id="nodeCreateRelationInput" aria-label="Relationship">
-          <option value="parent-of">Child of this thought</option>
-          <option value="child-of">Parent of this thought</option>
-          <option value="related">Related to this thought</option>
+        <select id="nodeCreateRelationInput" aria-label="Connection">
+          <option value="parent-of">Below this thought</option>
+          <option value="child-of">Above this thought</option>
+          <option value="related">Beside this thought</option>
         </select>
         <div class="context-actions">
           <button id="nodeCreateCancelButton" type="button">Cancel</button>
@@ -284,12 +285,12 @@
         <div class="context-title">Connection</div>
         <input id="linkNameInput" type="text" maxlength="80" placeholder="Connection name" autocomplete="off" />
         <select id="linkDirectionInput" aria-label="Connection relationship">
-          <option value="parent-forward">Keep parent to child</option>
-          <option value="parent-reverse">Reverse parent and child</option>
-          <option value="related">Related</option>
+          <option value="parent-forward">Keep direction</option>
+          <option value="parent-reverse">Reverse direction</option>
+          <option value="related">Connect beside</option>
         </select>
         <div class="context-actions">
-          <button id="linkUnlinkButton" class="context-danger" type="button">Unlink</button>
+          <button id="linkUnlinkButton" class="context-danger" type="button">Remove</button>
           <button type="submit">Save</button>
         </div>
 
@@ -298,9 +299,9 @@
         <select id="linkKeepInput" aria-label="Keep this thought connected"></select>
         <select id="linkRetargetInput" aria-label="Connect to another thought"></select>
         <select id="linkRetargetRelationInput" aria-label="Reconnect relationship">
-          <option value="parent-of">Make other thought child</option>
-          <option value="child-of">Make other thought parent</option>
-          <option value="related">Related</option>
+          <option value="parent-of">Move other below</option>
+          <option value="child-of">Move other above</option>
+          <option value="related">Connect beside</option>
           <option value="sibling">Place as sibling</option>
         </select>
         <button id="linkRetargetButton" type="button">Reconnect</button>
@@ -325,7 +326,7 @@
           <output id="lineThicknessValue" class="setting-value">1.5</output>
 
           <label class="field">
-            <span>Line connection type</span>
+            <span>Line shape</span>
             <select id="connectionTypeInput">
               <option value="straight">Straight</option>
               <option value="curve">Curve</option>
@@ -333,7 +334,7 @@
           </label>
 
           <label class="field">
-            <span>Line endpoint</span>
+            <span>Line ends</span>
             <select id="lineEndpointInput">
               <option value="floating">Floating line</option>
               <option value="touching">Touching line</option>
@@ -381,12 +382,12 @@
 
           <section class="settings-section kind-settings">
             <div class="settings-section-header">
-              <h3>Kinds</h3>
+              <h3>Types</h3>
             </div>
             <div id="kindList" class="kind-list"></div>
             <div class="kind-add-row">
-              <input id="newKindNameInput" type="text" maxlength="32" placeholder="New kind" autocomplete="off" />
-              <input id="newKindColorInput" type="color" aria-label="New kind colour" />
+              <input id="newKindNameInput" type="text" maxlength="32" placeholder="New type" autocomplete="off" />
+              <input id="newKindColorInput" type="color" aria-label="New type colour" />
               <button id="addKindButton" type="button">Add</button>
             </div>
           </section>

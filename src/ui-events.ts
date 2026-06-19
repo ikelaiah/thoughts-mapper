@@ -125,6 +125,7 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.notePreview.addEventListener("click", handlers.onNotePreviewClick);
   els.notePreview.addEventListener("keydown", handlers.onNotePreviewKeydown);
   els.linkForm.addEventListener("submit", handlers.onLinkSubmit);
+  els.linkTargetInput.addEventListener("input", handlers.renderRelationshipPreviews);
   els.linkTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);
   els.linkRelationInput.addEventListener("change", handlers.renderRelationshipPreviews);
   els.placeTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);

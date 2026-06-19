@@ -23,7 +23,6 @@ export type GraphRenderContext = {
   getGraphRenderThoughts: () => Thought[];
   getGraphRenderNodeBox: (id: string) => NodeBox;
   getLinkDirectionText: (link: Link) => string;
-  getLinkLabel: (link: Link) => string;
   getKindName: (id: string) => string;
   getKindColor: (id: string) => string;
   isCalmMode: () => boolean;
@@ -51,7 +50,6 @@ export function renderGraphView(ctx: GraphRenderContext): void {
     getGraphRenderThoughts,
     getGraphRenderNodeBox,
     getLinkDirectionText,
-    getLinkLabel,
     getKindName,
     getKindColor,
     isCalmMode,
@@ -154,7 +152,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       group.append(hitElement);
       group.append(linkElement);
 
-      if (!isLeaving && (isActiveLink || isSelectedLink || link.name)) {
+      if (!isLeaving && link.name) {
         const label = svg(
           "text",
           {
@@ -162,7 +160,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
             x: (fromPos.x + toPos.x) / 2,
             y: (fromPos.y + toPos.y) / 2 - 8,
           },
-          link.name || getLinkLabel(link),
+          link.name,
         );
         group.append(label);
       }

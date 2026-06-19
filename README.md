@@ -27,33 +27,49 @@ Then open the local URL printed by Vite. Your data is saved in this browser usin
 
 1. Pick a starter project from the left panel, or keep **My first map**.
 2. Add a thought with **Capture a thought...**.
-3. Select a thought to edit its title, kind, tags, and notes in the right panel.
-4. Use **Connect** to link thoughts as parent, child, or related.
+3. Select a thought to edit its title, type, tags, and notes in the right panel.
+4. Use **Connect to...** to search for another thought, then choose whether it sits above, below, or beside the selected thought.
 5. Click any thought in the graph or library to smoothly refocus the map.
 
-The visual graph keeps the selected thought central, places parents above, children below, and keeps siblings nearby so you can understand the local context quickly.
+The visual graph keeps the selected thought central. Thoughts that frame it sit above, thoughts that flow from it sit below, and lateral connections stay nearby so the local context is easy to read.
+
+## First Map Guide
+
+**Capture first.** Use the quick capture field for loose thoughts. If a thought is not connected yet, it waits in the inbox until you place it.
+
+**Select to focus.** Click a thought in the graph or library to bring its nearby connections into view. The map stays centered on what you are thinking about now.
+
+**Connect by position.** In the right panel, use **Connect to...** and search by title. Choose:
+
+- **Place above** when the other thought frames or contains this one.
+- **Add below** when the other thought follows from this one.
+- **Connect beside** when the thoughts are associated without a clear up/down direction.
+
+**Write notes where they belong.** Click the note preview to edit. Use Markdown for structure and `[[Thought title]]` mentions to surface possible connections.
+
+**Keep your data portable.** Use the **Data** menu for JSON backup, JSON import, and notes export.
 
 ## 🧠 Core Ideas
 
-**Thoughts** are the main items in your map. Each thought has a title, kind, tags, notes, and visual position.
+**Thoughts** are the main items in your map. Each thought has a title, type, tags, notes, and visual position.
 
-**Connections** show how thoughts relate. Links can be parent/child or related, and connection changes animate so you can see what changed.
+**Connections** show how thoughts sit together. A connection can place one thought above another, below another, or beside another. Connection changes animate so you can see what changed.
 
-**Kinds** are lightweight thought types. The default kind is **Thought** with a blue dot. You can create, rename, recolor, reorder, delete, and choose the default kind in **Settings → Kinds**.
+**Types** are lightweight thought categories. The default type is **Thought** with a blue dot. You can create, rename, recolor, reorder, delete, and choose the default type in **Settings → Types**.
 
 **Inbox thoughts** are captured ideas that are not connected yet. They stay out of the main graph until you place them.
 
 ## ✨ What You Can Do
 
 - Create and edit visual thought nodes
-- Connect thoughts as parent, child, or related
-- Reconnect links with a smooth line-draw transition
-- Unlink thoughts with a fade-out and gentle selected-view transition
+- Connect thoughts above, below, or beside each other
+- Reconnect thoughts with a smooth line-draw transition
+- Remove connections with a fade-out and gentle selected-view transition
 - Right-click a thought to create a connected thought
-- Right-click a connection to rename, reverse, unlink, or reconnect it
-- Search titles, notes, tags, and kinds
+- Right-click a connection to name, reverse, remove, or reconnect it
+- Search titles, notes, tags, and types
 - Filter by tag
-- Use `[[mentions]]` inside notes to discover backlink suggestions
+- Use `[[mentions]]` inside notes to discover mention suggestions
 - Write Markdown notes, including checklists
 - Use undo and redo for map edits
 - Pan, zoom, fit, center, and reset the graph view
@@ -66,11 +82,11 @@ The visual graph keeps the selected thought central, places parents above, child
 The UI is designed to make the graph feel stable instead of jumpy:
 
 - Selecting a thought smoothly pans and zooms to its local neighborhood
-- New and reconnected links draw from source to target
-- Removed links fade out before the layout settles
+- New and reconnected lines draw from source to target
+- Removed connections fade out before the layout settles
 - Disconnected nodes briefly dim so the change is understandable
-- Kind color appears as a slim ribbon instead of overwhelming the node
-- Kind labels stay quiet and appear mainly when selected, connected, previewed, or zoomed in
+- Type color appears as a slim ribbon instead of overwhelming the node
+- Type labels stay quiet and appear mainly when selected, connected, previewed, or zoomed in
 
 Use **Settings** to adjust:
 
@@ -80,7 +96,7 @@ Use **Settings** to adjust:
 - Calm mode for hiding second-degree context
 - Light/dark color schemes
 - Background presets
-- Kind names, colors, order, deletion, and default kind
+- Type names, colors, order, deletion, and default type
 
 ## 📝 Notes
 
@@ -97,13 +113,13 @@ Notes support a small, dependency-free Markdown renderer:
 
 Click the note preview to edit. Blur the editor to return to preview mode.
 
-## 💾 Backup and Import
+## 💾 Data Menu
 
-Use the left panel actions:
+Use the **Data** menu in the left panel:
 
-- **Backup (JSON)** exports all projects and settings.
-- **Import (JSON)** restores a full backup or replaces the current map with a single exported map.
-- **Export Notes Only** creates a Markdown document of your thoughts, notes, tags, and links.
+- **Backup JSON** exports all projects and settings.
+- **Import JSON** restores a full backup or replaces the current map with a single exported map.
+- **Export notes** creates a Markdown document of your thoughts, notes, tags, and connections.
 
 Because storage is browser-local, regular JSON backups are the safest way to move or preserve your maps.
 
@@ -115,7 +131,7 @@ Thoughts Mapper runs locally in your browser. There is no sync backend, account 
 
 - `index.html` — app markup and controls
 - `styles.css` — visual design, layout, themes, and animations
-- `src/main.ts` — state, persistence, graph rendering, interactions, notes, import/export, and kind management
+- `src/main.ts` — state, persistence, graph rendering, interactions, notes, import/export, and type management
 - `package.json`, `tsconfig.json`, `vite.config.ts` — TypeScript and Vite tooling
 
 ## 🧩 Good Next Features

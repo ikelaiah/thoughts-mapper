@@ -70,6 +70,8 @@ export function renderGraphView(ctx: GraphRenderContext): void {
   const secondaryFocusIds = new Set(getSecondaryFocusFamilyIds(graphFocusId));
   const visibleFocusIds = new Set(getFocusFamilyIds(graphFocusId));
   const hiddenFocusIds = new Set(isCalmMode() ? secondaryFocusIds : []);
+  const hideNonFocusInCalm = Boolean(isCalmMode() && graphFocusId);
+  const shouldHideThought = (id: string): boolean => hiddenFocusIds.has(id) || (hideNonFocusInCalm && !directFocusIds.has(id));
   const previewId = hoverThoughtId && hoverThoughtId !== graphFocusId ? hoverThoughtId : null;
   const previewIds = new Set(getPreviewFamilyIds(previewId));
   const linkRenderItems = [
@@ -90,7 +92,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const from = getGraphRenderThought(link.from);
       const to = getGraphRenderThought(link.to);
       if (!from || !to) return null;
-      if (hiddenFocusIds.has(link.from) || hiddenFocusIds.has(link.to)) return null;
+      if (shouldHideThought(link.from) || shouldHideThought(link.to)) return null;
       const fromPos = positions.get(from.id) || from;
       const toPos = positions.get(to.id) || to;
       const isActiveLink = link.from === state.selectedId || link.to === state.selectedId;
@@ -174,7 +176,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
 
   const nodeElements = getGraphRenderThoughts()
     .map((thought): RenderItem | null => {
-      if (hiddenFocusIds.has(thought.id)) return null;
+      if (shouldHideThought(thought.id)) return null;
       const thoughtEffect = graphEffects.dimThoughts.get(thought.id);
       const position = thoughtEffect?.position || positions.get(thought.id) || thought;
       const isActive = thought.id === graphFocusId;
@@ -199,6 +201,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const ribbonWidth = isActive ? 6 : 5;
       const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
       const ribbonX = -nodeWidth / 2 + 13;
+      const showCreateHandles = !isDeleting && !isSoftDisconnected && isActive;
       const group = svg("g", {
         class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
           isPreview ? " preview" : ""
@@ -257,6 +260,32 @@ export function renderGraphView(ctx: GraphRenderContext): void {
         textElements.push(svg("text", { class: "node-kind", y: kindY }, isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind)));
       }
       group.append(...textElements);
+      if (showCreateHandles) {
+        const handleGap = 17;
+        const handles = [
+          { direction: "top", relation: "child-of", x: 0, y: -nodeHeight / 2 - handleGap, label: "Add above" },
+          { direction: "right", relation: "related", x: nodeWidth / 2 + handleGap, y: 0, label: "Add beside" },
+          { direction: "bottom", relation: "parent-of", x: 0, y: nodeHeight / 2 + handleGap, label: "Add below" },
+          { direction: "left", relation: "related", x: -nodeWidth / 2 - handleGap, y: 0, label: "Add beside" },
+        ];
+        const handleGroup = svg("g", { class: "node-create-handles" });
+        handles.forEach((handle) => {
+          const handleElement = svg("g", {
+            class: "node-create-handle",
+            transform: `translate(${handle.x} ${handle.y})`,
+            "data-id": thought.id,
+            "data-direction": handle.direction,
+            "data-relation": handle.relation,
+          });
+          handleElement.append(
+            svg("title", {}, handle.label),
+            svg("circle", { class: "node-handle-hit", r: 14 }),
+            svg("circle", { class: "node-handle-dot", r: 5.8 }),
+          );
+          handleGroup.append(handleElement);
+        });
+        group.append(handleGroup);
+      }
       const priority = isActive ? 4 : isPreview ? 3 : isConnected || isPreviewRelated ? 2 : isDimmed ? 0 : 1;
       return { element: group, priority };
     })

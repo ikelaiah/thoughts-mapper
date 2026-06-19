@@ -200,6 +200,7 @@ const els: AppElements = {
   contextMenu: qs("#contextMenu"),
   nodeCreateForm: qs("#nodeCreateForm"),
   nodeCreateInput: qs("#nodeCreateInput"),
+  nodeCreateNoteInput: qs("#nodeCreateNoteInput"),
   nodeCreateRelationInput: qs("#nodeCreateRelationInput"),
   nodeCreateCancelButton: qs("#nodeCreateCancelButton"),
   linkEditForm: qs("#linkEditForm"),
@@ -1274,6 +1275,7 @@ function addThought(title: string, anchorId = state.selectedId, relation: LinkRe
     y: selected ? selected.y + (relation === "child-of" ? -220 : 220) : Math.floor(inboxIndex / 4) * 120 + 260,
   };
 
+  thought.note = String(options.note || "").trim();
   state.thoughts.push(thought);
   if (selected) {
     if (relation === "related") {
@@ -1629,7 +1631,9 @@ function computeFocusPositions(selectedId = state.selectedId) {
   const children = getChildThoughts(selectedId);
   const related = getRelatedThoughts(selectedId);
   const directIds = new Set([selectedId, ...parents.map((thought) => thought.id), ...children.map((thought) => thought.id), ...related.map((thought) => thought.id)]);
-  const siblings = getSiblingThoughts(selectedId).filter((thought) => !directIds.has(thought.id));
+  const siblings = isCalmMode()
+    ? []
+    : getSiblingThoughts(selectedId).filter((thought) => !directIds.has(thought.id));
   const secondAncestors = getAncestorEntries(selectedId, 2)
     .filter((entry) => entry.depth > 1 && !directIds.has(entry.thought.id))
     .map((entry) => entry.thought);
@@ -1827,7 +1831,7 @@ function getDirectFocusThoughts(id) {
     ...getParentThoughts(id),
     ...getChildThoughts(id),
     ...getRelatedThoughts(id),
-    ...getSiblingThoughts(id),
+    ...(isCalmMode() ? [] : getSiblingThoughts(id)),
   ])
     .filter(Boolean);
 }
@@ -2642,6 +2646,26 @@ function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return;
   event.preventDefault();
   els.graph.setPointerCapture(event.pointerId);
+  const createHandle = getClosestElement(event.target, ".node-create-handle");
+  if (createHandle?.dataset.id) {
+    const relation = getCreateHandleRelation(createHandle.dataset.relation);
+    const direction = getCreateHandleDirection(createHandle.dataset.direction);
+    contextAnchorId = createHandle.dataset.id;
+    selectedLinkId = null;
+    setHoverThought(contextAnchorId);
+    pointerMode = {
+      type: "create-handle",
+      id: contextAnchorId,
+      relation,
+      direction,
+      startX: event.clientX,
+      startY: event.clientY,
+      dragged: false,
+    };
+    pointerStart = null;
+    return;
+  }
+
   const link = getClosestElement(event.target, ".link-group");
   if (link) {
     selectLink(link.dataset.linkId);
@@ -2673,6 +2697,11 @@ function onPointerDown(event: PointerEvent) {
 
 function onPointerMove(event: PointerEvent) {
   updateHoverThought(event);
+  if (pointerMode?.type === "create-handle") {
+    const dragDistance = Math.hypot(event.clientX - pointerMode.startX, event.clientY - pointerMode.startY);
+    pointerMode.dragged = pointerMode.dragged || dragDistance > 6;
+    return;
+  }
   // Only the empty canvas pans; a press on a node never moves it.
   if (pointerMode?.type !== "pan" || !pointerStart) return;
   state.view.x = pointerStart.viewX + (event.clientX - pointerStart.clientX);
@@ -2680,9 +2709,14 @@ function onPointerMove(event: PointerEvent) {
   renderGraph();
 }
 
-function onPointerUp() {
+function onPointerUp(event: PointerEvent) {
   if (pointerMode?.type === "node") {
     selectThought(pointerMode.id);
+  } else if (pointerMode?.type === "create-handle") {
+    contextAnchorId = pointerMode.id;
+    const x = pointerMode.dragged ? event.clientX : pointerMode.startX;
+    const y = pointerMode.dragged ? event.clientY : pointerMode.startY;
+    openNodeContextMenu(x, y, pointerMode.relation);
   } else if (pointerMode?.type === "pan") {
     persistState();
   }
@@ -2735,13 +2769,22 @@ function selectLink(linkId) {
   renderGraph();
 }
 
-function openNodeContextMenu(clientX, clientY) {
+function getCreateHandleRelation(value: string | undefined): LinkRelation {
+  return value === "child-of" || value === "related" ? value : "parent-of";
+}
+
+function getCreateHandleDirection(value: string | undefined): "top" | "right" | "bottom" | "left" {
+  return value === "top" || value === "right" || value === "bottom" || value === "left" ? value : "bottom";
+}
+
+function openNodeContextMenu(clientX, clientY, relation: LinkRelation = "parent-of") {
   contextLinkId = null;
   els.nodeCreateForm.hidden = false;
   els.linkEditForm.hidden = true;
   els.contextMenu.hidden = false;
   els.nodeCreateInput.value = "";
-  els.nodeCreateRelationInput.value = "parent-of";
+  els.nodeCreateNoteInput.value = "";
+  els.nodeCreateRelationInput.value = relation;
   positionContextMenu(clientX, clientY);
   requestAnimationFrame(() => els.nodeCreateInput.focus());
 }
@@ -2779,7 +2822,9 @@ function onNodeCreateSubmit(event) {
   event.preventDefault();
   const title = els.nodeCreateInput.value.trim();
   if (!title || !contextAnchorId) return;
-  addThought(title, contextAnchorId, els.nodeCreateRelationInput.value as LinkRelation);
+  addThought(title, contextAnchorId, els.nodeCreateRelationInput.value as LinkRelation, {
+    note: els.nodeCreateNoteInput.value,
+  });
   closeContextMenu();
 }
 

@@ -65,6 +65,12 @@ let saveTimer: number | undefined;
 let statusTimer: number | undefined;
 let graphRect = { width: 1, height: 1 };
 type PanelSide = "left" | "right";
+type CalmDepthLayoutOptions = {
+  verticalGap: number;
+  sideGap: number;
+  rowGap: number;
+  selectedX: number;
+};
 const PANEL_WIDTH_RULES: Record<PanelSide, { storageKey: string; defaultValue: number; min: number; max: number }> = {
   left: { storageKey: "thoughts-mapper:left-panel-width", defaultValue: 320, min: 240, max: 460 },
   right: { storageKey: "thoughts-mapper:right-panel-width", defaultValue: 360, min: 300, max: 560 },
@@ -1678,7 +1684,19 @@ function computeFocusPositions(selectedId = state.selectedId) {
   });
   arrangeHorizontalThoughtRow(positions, children, selected.x, selected.y + verticalGap, getNodeBox, { gap: rowGap });
 
-  if (!isCalmMode()) {
+  if (isCalmMode()) {
+    arrangeCalmDepthContext(
+      positions,
+      selected.id,
+      new Set([selected.id, ...parents.map((thought) => thought.id), ...children.map((thought) => thought.id), ...related.map((thought) => thought.id)]),
+      {
+        verticalGap: isMobileLayout() ? 118 : 142,
+        sideGap: Math.max(48, sideGap * 0.72),
+        rowGap: isMobileLayout() ? 20 : 28,
+        selectedX: selected.x,
+      },
+    );
+  } else {
     arrangeParentRelatedContext(positions, parentRelated, {
       gap: rowGap,
       sideGap: Math.max(44, sideGap * 0.72),
@@ -1695,6 +1713,71 @@ function computeFocusPositions(selectedId = state.selectedId) {
     positions.set(selected.id, { x: selected.x, y: selected.y });
   }
   return positions;
+}
+
+function arrangeCalmDepthContext(
+  positions: PositionMap,
+  selectedId: string,
+  arrangedIds: Set<string>,
+  options: CalmDepthLayoutOptions,
+): void {
+  const graphIds = new Set(getGraphThoughts().map((thought) => thought.id));
+  if (!graphIds.has(selectedId)) return;
+
+  const queue = [selectedId, ...[...arrangedIds].filter((id) => id !== selectedId)];
+  const queuedIds = new Set(queue);
+  const depthById = new Map<string, number>([[selectedId, 0]]);
+  arrangedIds.forEach((id) => {
+    if (id !== selectedId) depthById.set(id, 1);
+  });
+
+  const takeUnarranged = (thoughts: Thought[]): Thought[] =>
+    uniqueThoughts(thoughts).filter((thought) => graphIds.has(thought.id) && !arrangedIds.has(thought.id));
+  const enqueue = (thoughts: Thought[], depth: number): void => {
+    thoughts.forEach((thought) => {
+      arrangedIds.add(thought.id);
+      depthById.set(thought.id, depth);
+      if (queuedIds.has(thought.id)) return;
+      queue.push(thought.id);
+      queuedIds.add(thought.id);
+    });
+  };
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const anchorId = queue[index];
+    const anchor = getThought(anchorId);
+    const anchorPosition = positions.get(anchorId) || anchor;
+    if (!anchor || !anchorPosition) continue;
+
+    const anchorDepth = depthById.get(anchorId) ?? 0;
+    const nextDepth = anchorDepth + 1;
+    const verticalGap = getCalmLayoutGap(nextDepth, options.verticalGap);
+    const sideGap = getCalmLayoutGap(nextDepth, options.sideGap);
+    const anchorBox = getNodeBox(anchorId);
+
+    const parents = takeUnarranged(getParentThoughts(anchorId));
+    arrangeHorizontalThoughtRow(positions, parents, anchorPosition.x, anchorPosition.y - verticalGap, getNodeBox, { gap: options.rowGap });
+    enqueue(parents, nextDepth);
+
+    const children = takeUnarranged(getChildThoughts(anchorId));
+    arrangeHorizontalThoughtRow(positions, children, anchorPosition.x, anchorPosition.y + verticalGap, getNodeBox, { gap: options.rowGap });
+    enqueue(children, nextDepth);
+
+    const related = takeUnarranged(getRelatedThoughts(anchorId));
+    const side = anchorPosition.x < options.selectedX ? "left" : "right";
+    const edgeX = side === "left"
+      ? anchorPosition.x - anchorBox.width / 2 - sideGap
+      : anchorPosition.x + anchorBox.width / 2 + sideGap;
+    arrangeVerticalThoughtColumn(positions, related, edgeX, anchorPosition.y, getNodeBox, {
+      gap: options.rowGap,
+      side,
+    });
+    enqueue(related, nextDepth);
+  }
+}
+
+function getCalmLayoutGap(depth: number, baseGap: number): number {
+  return Math.max(baseGap * 0.68, baseGap * getCalmDepthStyle(depth).scale);
 }
 
 function arrangeParentRelatedContext(positions: PositionMap, entries: { parentId: string; thought: Thought }[], options: ParentRelatedOptions = {}) {

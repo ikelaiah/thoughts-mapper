@@ -34,6 +34,7 @@ import type {
   CreateHandleDirection,
   CreateHandlePreview,
   CreateKindOptions,
+  GraphDepthStyle,
   GraphEffects,
   GraphTransitionOptions,
   Link,
@@ -84,6 +85,13 @@ const graphEffects: GraphEffects = {
   leavingLinks: [] as LinkRenderEffect[],
   dimThoughts: new Map<string, ThoughtRenderEffect>(),
 };
+const CALM_DEPTH_STYLES: GraphDepthStyle[] = [
+  { level: 1, scale: 1, opacity: 1 },
+  { level: 2, scale: 0.9, opacity: 0.4 },
+  { level: 3, scale: 0.8, opacity: 0.5 },
+  { level: 4, scale: 0.7, opacity: 0.6 },
+  { level: 5, scale: 0.6, opacity: 0.7 },
+];
 let contextAnchorId: string | null = null;
 let pendingNodeCreatePosition: Point | null = null;
 let contextLinkId: string | null = null;
@@ -1237,6 +1245,7 @@ function renderGraph() {
     getDirectFocusFamilyIds,
     getSecondaryFocusFamilyIds,
     getFocusFamilyIds,
+    getCalmDepthStyles,
     getPreviewFamilyIds,
     getGraphRenderThought,
     getGraphRenderThoughts,
@@ -1823,6 +1832,44 @@ function getFocusFamilyIds(id) {
   ])
     .filter(Boolean)
     .map((thought) => thought.id);
+}
+
+function getCalmDepthStyles(id: string | null): Map<string, GraphDepthStyle> {
+  const styles = new Map<string, GraphDepthStyle>();
+  if (!isCalmMode() || !id || isInboxThought(id)) return styles;
+
+  const graphIds = new Set(getGraphThoughts().map((thought) => thought.id));
+  if (!graphIds.has(id)) return styles;
+
+  const neighbours = new Map<string, string[]>();
+  graphIds.forEach((thoughtId) => neighbours.set(thoughtId, []));
+  state.links.forEach((link) => {
+    if (!graphIds.has(link.from) || !graphIds.has(link.to)) return;
+    neighbours.get(link.from)?.push(link.to);
+    neighbours.get(link.to)?.push(link.from);
+  });
+
+  const distances = new Map<string, number>([[id, 0]]);
+  const queue = [id];
+  for (let index = 0; index < queue.length; index += 1) {
+    const currentId = queue[index];
+    const currentDistance = distances.get(currentId) ?? 0;
+    neighbours.get(currentId)?.forEach((nextId) => {
+      if (distances.has(nextId)) return;
+      distances.set(nextId, currentDistance + 1);
+      queue.push(nextId);
+    });
+  }
+
+  distances.forEach((distance, thoughtId) => {
+    styles.set(thoughtId, getCalmDepthStyle(distance));
+  });
+  return styles;
+}
+
+function getCalmDepthStyle(distance: number): GraphDepthStyle {
+  const level = distance <= 1 ? 1 : Math.min(distance, CALM_DEPTH_STYLES.length);
+  return CALM_DEPTH_STYLES[level - 1] || CALM_DEPTH_STYLES[CALM_DEPTH_STYLES.length - 1];
 }
 
 function getDirectFocusFamilyIds(id) {

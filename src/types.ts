@@ -85,6 +85,12 @@ export type NodeBox = {
   height: number;
 };
 
+export type GraphDepthStyle = {
+  level: number;
+  scale: number;
+  opacity: number;
+};
+
 export type LinkRelation = "parent-of" | "child-of" | "related";
 export type RetargetRelation = LinkRelation | "sibling";
 export type CreateHandleDirection = "top" | "right" | "bottom" | "left";

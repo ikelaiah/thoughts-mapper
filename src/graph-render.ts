@@ -1,6 +1,6 @@
 import { NODE_CREATE_HANDLE_GAP } from "./constants";
 import { getCurvePath, getTrimmedLinkEndpoints } from "./graph-layout";
-import type { AppElements, CreateHandlePreview, GraphEffects, Link, NodeBox, PositionMap, ProjectState, SvgAttrs, Thought } from "./types";
+import type { AppElements, CreateHandlePreview, GraphDepthStyle, GraphEffects, Link, NodeBox, PositionMap, ProjectState, SvgAttrs, Thought } from "./types";
 
 type RenderItem = {
   element: SVGElement;
@@ -20,6 +20,7 @@ export type GraphRenderContext = {
   getDirectFocusFamilyIds: (id: string | null) => string[];
   getSecondaryFocusFamilyIds: (id: string | null) => string[];
   getFocusFamilyIds: (id: string | null) => string[];
+  getCalmDepthStyles: (id: string | null) => Map<string, GraphDepthStyle>;
   getPreviewFamilyIds: (id: string | null) => string[];
   getGraphRenderThought: (id: string) => Thought | undefined;
   getGraphRenderThoughts: () => Thought[];
@@ -48,6 +49,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
     getDirectFocusFamilyIds,
     getSecondaryFocusFamilyIds,
     getFocusFamilyIds,
+    getCalmDepthStyles,
     getPreviewFamilyIds,
     getGraphRenderThought,
     getGraphRenderThoughts,
@@ -72,9 +74,32 @@ export function renderGraphView(ctx: GraphRenderContext): void {
   const directFocusIds = new Set(getDirectFocusFamilyIds(graphFocusId));
   const secondaryFocusIds = new Set(getSecondaryFocusFamilyIds(graphFocusId));
   const visibleFocusIds = new Set(getFocusFamilyIds(graphFocusId));
-  const hiddenFocusIds = new Set(isCalmMode() ? secondaryFocusIds : []);
-  const hideNonFocusInCalm = Boolean(isCalmMode() && graphFocusId);
-  const shouldHideThought = (id: string): boolean => hiddenFocusIds.has(id) || (hideNonFocusInCalm && !directFocusIds.has(id));
+  const calmDepthStyles = getCalmDepthStyles(graphFocusId);
+  const useCalmDepthStyles = Boolean(isCalmMode() && graphFocusId);
+  const getNodeDepthStyle = (id: string): GraphDepthStyle | null => calmDepthStyles.get(id) || null;
+  const shouldHideThought = (id: string): boolean => {
+    if (!useCalmDepthStyles) return false;
+    if (graphEffects.dimThoughts.has(id)) return false;
+    return !calmDepthStyles.has(id);
+  };
+  const getStyledNodeBox = (id: string): NodeBox => {
+    const box = getGraphRenderNodeBox(id);
+    const depthStyle = getNodeDepthStyle(id);
+    if (!depthStyle || depthStyle.scale === 1) return box;
+    return {
+      ...box,
+      scale: box.scale * depthStyle.scale,
+      width: box.width * depthStyle.scale,
+      height: box.height * depthStyle.scale,
+    };
+  };
+  const getLinkDepthStyle = (fromId: string, toId: string): GraphDepthStyle | null => {
+    const fromStyle = getNodeDepthStyle(fromId);
+    const toStyle = getNodeDepthStyle(toId);
+    if (!fromStyle) return toStyle;
+    if (!toStyle) return fromStyle;
+    return fromStyle.level >= toStyle.level ? fromStyle : toStyle;
+  };
   const previewId = hoverThoughtId && hoverThoughtId !== graphFocusId ? hoverThoughtId : null;
   const previewIds = new Set(getPreviewFamilyIds(previewId));
   const linkRenderItems = [
@@ -104,18 +129,22 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const isPreviewLink = Boolean(previewId && previewIds.has(link.from) && previewIds.has(link.to));
       const isAppearing = effect === "appearing";
       const isLeaving = effect === "leaving";
-      const fromNodeBox = getGraphRenderNodeBox(link.from);
-      const toNodeBox = getGraphRenderNodeBox(link.to);
+      const fromNodeBox = getStyledNodeBox(link.from);
+      const toNodeBox = getStyledNodeBox(link.to);
       const endpoints = getTrimmedLinkEndpoints(fromPos, toPos, fromNodeBox, toNodeBox, state.settings);
       const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink || isSelectedLink ? 0.8 : 0);
-      const group = svg("g", {
+      const linkDepthStyle = getLinkDepthStyle(link.from, link.to);
+      const linkOpacity = linkDepthStyle && !isActiveLink && !isSelectedLink && !isPreviewLink && !isLeaving ? linkDepthStyle.opacity : 1;
+      const groupAttrs: SvgAttrs = {
         class: `link-group${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${isLeaving ? " leaving" : ""}${
           isFocusLink && !isActiveLink ? " context" : ""
         }${
           state.selectedId && !isFocusLink && !isSelectedLink && !isLeaving ? " dimmed" : ""
         }`,
         "data-link-id": visualId,
-      });
+      };
+      if (linkOpacity < 1) groupAttrs.style = `opacity: ${linkOpacity}`;
+      const group = svg("g", groupAttrs);
       group.append(svg("title", {}, `${from.title} ${getLinkDirectionText(link)} ${to.title}`));
       const linkAttrs: SvgAttrs = {
         class: `link-line ${link.type === "related" ? "related" : "parent"}${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${
@@ -221,7 +250,8 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const isDeleting = thoughtEffect?.mode === "deleting";
       const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id) && !isDeleting;
       const box = getGraphRenderNodeBox(thought.id);
-      const scale = box.scale;
+      const depthStyle = getNodeDepthStyle(thought.id);
+      const scale = box.scale * (depthStyle?.scale ?? 1);
       const nodeWidth = box.baseWidth;
       const nodeHeight = box.baseHeight;
       const nodeHitWidth = box.hitBaseWidth;
@@ -235,13 +265,22 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
       const ribbonX = -nodeWidth / 2 + 13;
       const showCreateHandles = !isDeleting && !isSoftDisconnected && (isActive || isPreview);
+      const nodeOpacity = isDeleting
+        ? 1
+        : isSoftDisconnected
+          ? 0.3
+          : depthStyle && !isPreview && !isPreviewRelated
+            ? depthStyle.opacity
+            : isDimmed && !isPreview && !isPreviewRelated
+              ? 0.36
+              : 1;
       const group = svg("g", {
         class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
           isPreview ? " preview" : ""
         }${isPreviewRelated ? " preview-related" : ""}`,
         transform: `translate(${position.x} ${position.y}) scale(${scale})`,
         "data-id": thought.id,
-        opacity: isDeleting ? 1 : isSoftDisconnected ? 0.3 : isDimmed && !isPreview && !isPreviewRelated ? 0.36 : 1,
+        opacity: nodeOpacity,
       });
       group.append(svg("title", {}, `${thought.title} · ${isInboxThought(thought.id) ? "Inbox" : getKindName(thought.kind)}`));
 

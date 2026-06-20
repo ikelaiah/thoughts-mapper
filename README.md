@@ -93,7 +93,6 @@ Use **Settings** to adjust:
 - Line thickness
 - Straight or curved connections
 - Floating or touching line endpoints
-- Calm mode for hiding second-degree context
 - Light/dark color schemes
 - Background presets
 - Type names, colors, order, deletion, and default type

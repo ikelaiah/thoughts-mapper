@@ -168,7 +168,6 @@ const els: AppElements = {
   lineThicknessValue: qs("#lineThicknessValue"),
   connectionTypeInput: qs("#connectionTypeInput"),
   lineEndpointInput: qs("#lineEndpointInput"),
-  calmModeInput: qs("#calmModeInput"),
   kindList: qs("#kindList"),
   newKindNameInput: qs("#newKindNameInput"),
   newKindColorInput: qs("#newKindColorInput"),
@@ -388,14 +387,6 @@ function bindEvents() {
       pushHistory();
       state.settings.lineEndpoint = els.lineEndpointInput.value as MapSettings["lineEndpoint"];
       applySettings();
-      renderGraph();
-      persistState();
-    },
-    onCalmModeChange: () => {
-      pushHistory();
-      state.settings.calmMode = els.calmModeInput.checked;
-      applySettings();
-      focusPositions = computeFocusPositions(state.selectedId);
       renderGraph();
       persistState();
     },
@@ -730,7 +721,6 @@ function applySettings() {
   els.lineThicknessValue.textContent = `${state.settings.lineThickness.toFixed(1)} px`;
   els.connectionTypeInput.value = state.settings.connectionType;
   els.lineEndpointInput.value = state.settings.lineEndpoint;
-  els.calmModeInput.checked = Boolean(state.settings.calmMode);
 }
 
 function getColourSchemeId(theme, background) {
@@ -1861,7 +1851,7 @@ function uniqueThoughts(thoughts) {
 }
 
 function isCalmMode() {
-  return Boolean(state.settings.calmMode);
+  return true;
 }
 
 function getConnections(id) {

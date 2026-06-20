@@ -200,7 +200,6 @@ export type AppElements = {
   lineThicknessValue: HTMLOutputElement;
   connectionTypeInput: HTMLSelectElement;
   lineEndpointInput: HTMLSelectElement;
-  calmModeInput: HTMLInputElement;
   kindList: HTMLElement;
   newKindNameInput: HTMLInputElement;
   newKindColorInput: HTMLInputElement;

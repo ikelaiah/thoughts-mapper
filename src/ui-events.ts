@@ -33,7 +33,6 @@ export type UiEventHandlers = {
   onLineThicknessInput: () => void;
   onConnectionTypeChange: () => void;
   onLineEndpointChange: () => void;
-  onCalmModeChange: () => void;
   resetViewAndCloseMoreMenu: () => void;
   onTitleInput: () => void;
   onKindChange: () => void;
@@ -111,7 +110,6 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.lineThicknessInput.addEventListener("input", handlers.onLineThicknessInput);
   els.connectionTypeInput.addEventListener("change", handlers.onConnectionTypeChange);
   els.lineEndpointInput.addEventListener("change", handlers.onLineEndpointChange);
-  els.calmModeInput.addEventListener("change", handlers.onCalmModeChange);
   els.resetButton.addEventListener("click", handlers.resetViewAndCloseMoreMenu);
   els.titleInput.addEventListener("input", handlers.onTitleInput);
   els.kindInput.addEventListener("change", handlers.onKindChange);

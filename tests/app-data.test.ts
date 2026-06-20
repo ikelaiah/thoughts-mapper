@@ -17,7 +17,7 @@ describe("sanitizeState", () => {
       settings: {
         theme: "neon",
         background: "void",
-        calmMode: "yes",
+        calmMode: false,
         lineThickness: 20,
         connectionType: "diagonal",
         lineEndpoint: "edge",

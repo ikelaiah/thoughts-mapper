@@ -1,5 +1,6 @@
+import { NODE_CREATE_HANDLE_GAP } from "./constants";
 import { getCurvePath, getTrimmedLinkEndpoints } from "./graph-layout";
-import type { AppElements, GraphEffects, Link, NodeBox, PositionMap, ProjectState, SvgAttrs, Thought } from "./types";
+import type { AppElements, CreateHandlePreview, GraphEffects, Link, NodeBox, PositionMap, ProjectState, SvgAttrs, Thought } from "./types";
 
 type RenderItem = {
   element: SVGElement;
@@ -11,6 +12,7 @@ export type GraphRenderContext = {
   els: Pick<AppElements, "viewport" | "linksLayer" | "nodesLayer">;
   graphRect: { width: number; height: number };
   graphEffects: GraphEffects;
+  createHandlePreview: CreateHandlePreview | null;
   hoverThoughtId: string | null;
   selectedLinkId: string | null;
   getVisualPositions: () => PositionMap;
@@ -38,6 +40,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
     els,
     graphRect,
     graphEffects,
+    createHandlePreview,
     hoverThoughtId,
     selectedLinkId,
     getVisualPositions,
@@ -172,6 +175,36 @@ export function renderGraphView(ctx: GraphRenderContext): void {
     .filter((item): item is RenderItem => Boolean(item))
     .sort((a, b) => a.priority - b.priority)
     .map((item) => item.element);
+  if (createHandlePreview) {
+    const previewAttrs: SvgAttrs = {
+      class: `create-drag-line${createHandlePreview.ready ? " ready" : ""}`,
+    };
+    const previewLine = state.settings.connectionType === "curve"
+      ? svg("path", {
+          ...previewAttrs,
+          d: getCurvePath(createHandlePreview.from, createHandlePreview.to),
+        })
+      : svg("line", {
+          ...previewAttrs,
+          x1: createHandlePreview.from.x,
+          y1: createHandlePreview.from.y,
+          x2: createHandlePreview.to.x,
+          y2: createHandlePreview.to.y,
+        });
+    const previewGroup = svg("g", {
+      class: `create-drag-preview${createHandlePreview.ready ? " ready" : ""}`,
+    });
+    previewGroup.append(
+      previewLine,
+      svg("circle", {
+        class: "create-drag-end",
+        cx: createHandlePreview.to.x,
+        cy: createHandlePreview.to.y,
+        r: createHandlePreview.ready ? 6 : 4.5,
+      }),
+    );
+    linkElements.push(previewGroup);
+  }
   els.linksLayer.replaceChildren(...linkElements);
 
   const nodeElements = getGraphRenderThoughts()
@@ -201,7 +234,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const ribbonWidth = isActive ? 6 : 5;
       const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
       const ribbonX = -nodeWidth / 2 + 13;
-      const showCreateHandles = !isDeleting && !isSoftDisconnected && isActive;
+      const showCreateHandles = !isDeleting && !isSoftDisconnected && (isActive || isPreview);
       const group = svg("g", {
         class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
           isPreview ? " preview" : ""
@@ -261,7 +294,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       }
       group.append(...textElements);
       if (showCreateHandles) {
-        const handleGap = 17;
+        const handleGap = NODE_CREATE_HANDLE_GAP;
         const handles = [
           { direction: "top", relation: "child-of", x: 0, y: -nodeHeight / 2 - handleGap, label: "Add above" },
           { direction: "right", relation: "related", x: nodeWidth / 2 + handleGap, y: 0, label: "Add beside" },

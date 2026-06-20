@@ -9,6 +9,9 @@ export const HISTORY_LIMIT = 60;
 export const NEW_KIND_VALUE = "__new-kind__";
 export const DEFAULT_KIND_ID = "thought";
 export const LINK_DRAW_DURATION = 260;
+export const NODE_CREATE_CLICK_THRESHOLD = 6;
+export const NODE_CREATE_DRAG_THRESHOLD = 88;
+export const NODE_CREATE_HANDLE_GAP = 17;
 
 export const defaultKindDefinitions: KindDefinition[] = [
   { id: "thought", name: "Thought", color: "#4c7fb8" },

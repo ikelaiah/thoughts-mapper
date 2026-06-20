@@ -87,9 +87,10 @@ export type NodeBox = {
 
 export type LinkRelation = "parent-of" | "child-of" | "related";
 export type RetargetRelation = LinkRelation | "sibling";
+export type CreateHandleDirection = "top" | "right" | "bottom" | "left";
 export type PositionMap = Map<string, Point>;
 export type SvgAttrs = Record<string, string | number | boolean>;
-export type AddThoughtOptions = { select?: boolean; center?: boolean; note?: string };
+export type AddThoughtOptions = { select?: boolean; center?: boolean; note?: string; position?: Point | null };
 export type SelectThoughtOptions = { center?: boolean };
 export type CenterOptions = { save?: boolean };
 export type RowOptions = { gap?: number };
@@ -101,7 +102,7 @@ export type MobileLibraryOptions = { focusSearch?: boolean };
 
 export type PointerMode =
   | { type: "node"; id: string }
-  | { type: "create-handle"; id: string; relation: LinkRelation; direction: "top" | "right" | "bottom" | "left"; startX: number; startY: number; dragged: boolean }
+  | { type: "create-handle"; id: string; relation: LinkRelation; direction: CreateHandleDirection; startX: number; startY: number }
   | { type: "pan" };
 
 export type PointerStart = {
@@ -114,6 +115,12 @@ export type PointerStart = {
 export type LinkRenderEffect = {
   id: string;
   link: Link;
+};
+
+export type CreateHandlePreview = {
+  from: Point;
+  to: Point;
+  ready: boolean;
 };
 
 export type ThoughtRenderEffect = {

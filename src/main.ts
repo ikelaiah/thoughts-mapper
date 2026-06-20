@@ -13,6 +13,9 @@ import {
   HISTORY_LIMIT,
   LINK_DRAW_DURATION,
   NEW_KIND_VALUE,
+  NODE_CREATE_CLICK_THRESHOLD,
+  NODE_CREATE_DRAG_THRESHOLD,
+  NODE_CREATE_HANDLE_GAP,
   colourSchemes,
   defaultKindDefinitions,
   kindColourPalette,
@@ -28,6 +31,8 @@ import type {
   AppData,
   AppElements,
   CenterOptions,
+  CreateHandleDirection,
+  CreateHandlePreview,
   CreateKindOptions,
   GraphEffects,
   GraphTransitionOptions,
@@ -73,12 +78,14 @@ let pointerStart: PointerStart | null = null;
 let focusAnimation: number | null = null;
 let focusPositions: PositionMap | null = null;
 let pendingGraphTransition: number | null = null;
+let createHandlePreview: CreateHandlePreview | null = null;
 const graphEffects: GraphEffects = {
   appearingLinkIds: new Set<string>(),
   leavingLinks: [] as LinkRenderEffect[],
   dimThoughts: new Map<string, ThoughtRenderEffect>(),
 };
 let contextAnchorId: string | null = null;
+let pendingNodeCreatePosition: Point | null = null;
 let contextLinkId: string | null = null;
 let hoverThoughtId: string | null = null;
 let selectedLinkId: string | null = null;
@@ -1222,6 +1229,7 @@ function renderGraph() {
     els,
     graphRect,
     graphEffects,
+    createHandlePreview,
     hoverThoughtId,
     selectedLinkId,
     getVisualPositions,
@@ -1265,14 +1273,16 @@ function addThought(title: string, anchorId = state.selectedId, relation: LinkRe
   const connectedCount = selected ? getConnectedThoughts(selected.id).length : 0;
   const angle = selected ? connectedCount * 0.72 - 0.4 : 0;
   const inboxIndex = getInboxThoughts().length;
+  const defaultX = selected ? selected.x + Math.cos(angle) * 150 : (inboxIndex % 4) * 170 - 255;
+  const defaultY = selected ? selected.y + (relation === "child-of" ? -220 : 220) : Math.floor(inboxIndex / 4) * 120 + 260;
   const thought = {
     id: makeId("t"),
     title,
     kind: getDefaultKindId(),
     note: "",
     tags: [],
-    x: selected ? selected.x + Math.cos(angle) * 150 : (inboxIndex % 4) * 170 - 255,
-    y: selected ? selected.y + (relation === "child-of" ? -220 : 220) : Math.floor(inboxIndex / 4) * 120 + 260,
+    x: options.position?.x ?? defaultX,
+    y: options.position?.y ?? defaultY,
   };
 
   thought.note = String(options.note || "").trim();
@@ -2643,6 +2653,7 @@ function renderMobileCapture() {
 
 function onPointerDown(event: PointerEvent) {
   closeContextMenu();
+  clearCreateHandlePreview();
   if (event.button !== 0) return;
   event.preventDefault();
   els.graph.setPointerCapture(event.pointerId);
@@ -2660,7 +2671,6 @@ function onPointerDown(event: PointerEvent) {
       direction,
       startX: event.clientX,
       startY: event.clientY,
-      dragged: false,
     };
     pointerStart = null;
     return;
@@ -2696,12 +2706,17 @@ function onPointerDown(event: PointerEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
-  updateHoverThought(event);
   if (pointerMode?.type === "create-handle") {
     const dragDistance = Math.hypot(event.clientX - pointerMode.startX, event.clientY - pointerMode.startY);
-    pointerMode.dragged = pointerMode.dragged || dragDistance > 6;
+    createHandlePreview = {
+      from: getCreateHandleGraphPoint(pointerMode.id, pointerMode.direction),
+      to: clientPointToGraph(event.clientX, event.clientY),
+      ready: dragDistance >= NODE_CREATE_DRAG_THRESHOLD,
+    };
+    renderGraph();
     return;
   }
+  updateHoverThought(event);
   // Only the empty canvas pans; a press on a node never moves it.
   if (pointerMode?.type !== "pan" || !pointerStart) return;
   state.view.x = pointerStart.viewX + (event.clientX - pointerStart.clientX);
@@ -2714,9 +2729,18 @@ function onPointerUp(event: PointerEvent) {
     selectThought(pointerMode.id);
   } else if (pointerMode?.type === "create-handle") {
     contextAnchorId = pointerMode.id;
-    const x = pointerMode.dragged ? event.clientX : pointerMode.startX;
-    const y = pointerMode.dragged ? event.clientY : pointerMode.startY;
-    openNodeContextMenu(x, y, pointerMode.relation);
+    const dragDistance = Math.hypot(event.clientX - pointerMode.startX, event.clientY - pointerMode.startY);
+    const isClick = dragDistance <= NODE_CREATE_CLICK_THRESHOLD;
+    const isReadyDrag = dragDistance >= NODE_CREATE_DRAG_THRESHOLD;
+    const createPosition = isReadyDrag ? clientPointToGraph(event.clientX, event.clientY) : null;
+    clearCreateHandlePreview();
+    if (isClick || isReadyDrag) {
+      const x = isReadyDrag ? event.clientX : pointerMode.startX;
+      const y = isReadyDrag ? event.clientY : pointerMode.startY;
+      openNodeContextMenu(x, y, pointerMode.relation, createPosition);
+    } else {
+      contextAnchorId = null;
+    }
   } else if (pointerMode?.type === "pan") {
     persistState();
   }
@@ -2773,12 +2797,45 @@ function getCreateHandleRelation(value: string | undefined): LinkRelation {
   return value === "child-of" || value === "related" ? value : "parent-of";
 }
 
-function getCreateHandleDirection(value: string | undefined): "top" | "right" | "bottom" | "left" {
+function getCreateHandleDirection(value: string | undefined): CreateHandleDirection {
   return value === "top" || value === "right" || value === "bottom" || value === "left" ? value : "bottom";
 }
 
-function openNodeContextMenu(clientX, clientY, relation: LinkRelation = "parent-of") {
+function clientPointToGraph(clientX: number, clientY: number): Point {
+  const bounds = els.graph.getBoundingClientRect();
+  return {
+    x: (clientX - bounds.left - graphRect.width / 2 - state.view.x) / state.view.scale,
+    y: (clientY - bounds.top - graphRect.height / 2 - state.view.y) / state.view.scale,
+  };
+}
+
+function getCreateHandleGraphPoint(id: string, direction: CreateHandleDirection): Point {
+  const thought = getGraphRenderThought(id) || getThought(id);
+  const position = (thought && getVisualPositions().get(id)) || thought || { x: 0, y: 0 };
+  const box = getGraphRenderNodeBox(id);
+  const handleGap = NODE_CREATE_HANDLE_GAP;
+  const offsets = {
+    top: { x: 0, y: -box.baseHeight / 2 - handleGap },
+    right: { x: box.baseWidth / 2 + handleGap, y: 0 },
+    bottom: { x: 0, y: box.baseHeight / 2 + handleGap },
+    left: { x: -box.baseWidth / 2 - handleGap, y: 0 },
+  };
+  const offset = offsets[direction];
+  return {
+    x: position.x + offset.x * box.scale,
+    y: position.y + offset.y * box.scale,
+  };
+}
+
+function clearCreateHandlePreview() {
+  if (!createHandlePreview) return;
+  createHandlePreview = null;
+  renderGraph();
+}
+
+function openNodeContextMenu(clientX, clientY, relation: LinkRelation = "parent-of", createPosition: Point | null = null) {
   contextLinkId = null;
+  pendingNodeCreatePosition = createPosition;
   els.nodeCreateForm.hidden = false;
   els.linkEditForm.hidden = true;
   els.contextMenu.hidden = false;
@@ -2793,6 +2850,7 @@ function openLinkContextMenu(linkId, clientX, clientY) {
   const link = getLink(linkId);
   if (!link) return;
   contextAnchorId = null;
+  pendingNodeCreatePosition = null;
   contextLinkId = linkId;
   els.nodeCreateForm.hidden = true;
   els.linkEditForm.hidden = false;
@@ -2815,6 +2873,7 @@ function positionContextMenu(clientX, clientY) {
 function closeContextMenu() {
   els.contextMenu.hidden = true;
   contextAnchorId = null;
+  pendingNodeCreatePosition = null;
   contextLinkId = null;
 }
 
@@ -2824,6 +2883,7 @@ function onNodeCreateSubmit(event) {
   if (!title || !contextAnchorId) return;
   addThought(title, contextAnchorId, els.nodeCreateRelationInput.value as LinkRelation, {
     note: els.nodeCreateNoteInput.value,
+    position: pendingNodeCreatePosition,
   });
   closeContextMenu();
 }

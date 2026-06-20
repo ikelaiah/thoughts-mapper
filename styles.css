@@ -1032,6 +1032,10 @@ body[data-background="calm"] .map-stage {
   cursor: copy;
 }
 
+.node-create-handles {
+  animation: nodeHandlesFadeIn 160ms ease both;
+}
+
 .node-handle-hit {
   fill: transparent;
   pointer-events: all;
@@ -1052,6 +1056,38 @@ body[data-background="calm"] .map-stage {
   r: 7;
   fill: var(--accent);
   stroke-width: 1.4;
+}
+
+.create-drag-preview {
+  pointer-events: none;
+}
+
+.create-drag-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-dasharray: 5 8;
+  opacity: 0.62;
+  filter: drop-shadow(0 0 5px rgba(88, 192, 177, 0.18));
+}
+
+.create-drag-line.ready {
+  stroke-dasharray: none;
+  opacity: 0.95;
+  filter: drop-shadow(0 0 7px rgba(88, 192, 177, 0.34));
+}
+
+.create-drag-end {
+  fill: var(--stage-bg);
+  stroke: var(--accent);
+  stroke-width: 2;
+  opacity: 0.72;
+}
+
+.create-drag-preview.ready .create-drag-end {
+  fill: var(--accent);
+  opacity: 1;
 }
 
 body[data-background="fireflies"] .ambient-layer {
@@ -1806,6 +1842,16 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
 @keyframes spinOrbitReverse {
   to {
     transform: rotate(-360deg);
+  }
+}
+
+@keyframes nodeHandlesFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
   }
 }
 

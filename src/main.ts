@@ -6,9 +6,11 @@ import {
   interpolate,
   interpolatePositions,
 } from "./graph-layout";
+import { createProject, sanitizeAppData, sanitizeState } from "./app-data";
 import { renderGraphView } from "./graph-render";
+import { renderMarkdown } from "./markdown";
+import { normalizeKindName, normalizeTags, sanitizeKindColor, sanitizeKindId } from "./normalizers";
 import {
-  APP_DATA_VERSION,
   DEFAULT_KIND_ID,
   HISTORY_LIMIT,
   LINK_DRAW_DURATION,
@@ -19,12 +21,12 @@ import {
   colourSchemes,
   defaultKindDefinitions,
   kindColourPalette,
-  legacyKindStyles,
   seedState,
   templateCatalog,
 } from "./constants";
 import { loadIndexedState, loadLocalState, openDatabase, persistIndexedState, persistLocalState } from "./storage";
 import { bindUiEvents } from "./ui-events";
+import { clamp, clone, makeId } from "./utils";
 import type {
   AddKindOptions,
   AddThoughtOptions,
@@ -288,55 +290,6 @@ function setStatus(message, duration = 1400) {
   }, duration);
 }
 
-function sanitizeAppData(raw) {
-  if (raw && Array.isArray(raw.projects)) {
-    const projects = raw.projects
-      .map((project, index) => sanitizeProject(project, index))
-      .filter(Boolean);
-    if (!projects.length) projects.push(createProject("Thoughts Mapper", seedState));
-    const activeProjectId = projects.some((project) => project.id === raw.activeProjectId)
-      ? raw.activeProjectId
-      : projects[0].id;
-    return {
-      version: APP_DATA_VERSION,
-      activeProjectId,
-      projects,
-    };
-  }
-
-  return {
-    version: APP_DATA_VERSION,
-    activeProjectId: "project-main",
-    projects: [
-      {
-        id: "project-main",
-        name: "My first map",
-        updatedAt: new Date().toISOString(),
-        state: sanitizeState(raw || seedState),
-      },
-    ],
-  };
-}
-
-function sanitizeProject(project, index = 0) {
-  if (!project) return null;
-  return {
-    id: String(project.id || makeId("project")),
-    name: String(project.name || `Project ${index + 1}`).slice(0, 80),
-    updatedAt: project.updatedAt || new Date().toISOString(),
-    state: sanitizeState(project.state || seedState),
-  };
-}
-
-function createProject(name, projectState) {
-  return {
-    id: makeId("project"),
-    name: String(name || "Untitled project").slice(0, 80),
-    updatedAt: new Date().toISOString(),
-    state: sanitizeState(projectState || seedState),
-  };
-}
-
 function getActiveProject() {
   let project = appData.projects.find((item) => item.id === appData.activeProjectId);
   if (!project) {
@@ -352,104 +305,6 @@ function syncActiveProject() {
   const project = getActiveProject();
   project.state = sanitizeState(state);
   project.updatedAt = new Date().toISOString();
-}
-
-function sanitizeKindDefinitions(kinds, thoughts = []) {
-  const byId = new Map();
-  const sourceKinds = Array.isArray(kinds) && kinds.length ? kinds : defaultKindDefinitions;
-  sourceKinds.forEach((kind, index) => {
-    const name = normalizeKindName(kind?.name || kind?.id || `Kind ${index + 1}`);
-    const id = sanitizeKindId(kind?.id || name);
-    if (!id) return;
-    if (byId.has(id)) {
-      const existing = byId.get(id);
-      byId.set(id, {
-        ...existing,
-        name,
-        color: sanitizeKindColor(kind?.color, existing.color),
-      });
-      return;
-    }
-    byId.set(id, {
-      id,
-      name,
-      color: sanitizeKindColor(kind?.color, kindColourPalette[index % kindColourPalette.length]),
-    });
-  });
-  thoughts.forEach((thought) => {
-    const id = sanitizeKindId(thought?.kind);
-    if (!id || byId.has(id)) return;
-    byId.set(id, {
-      id,
-      name: normalizeKindName(id),
-      color: sanitizeKindColor(legacyKindStyles[id], kindColourPalette[byId.size % kindColourPalette.length]),
-    });
-  });
-  if (!byId.size) byId.set(DEFAULT_KIND_ID, { ...defaultKindDefinitions[0] });
-  return [...byId.values()].slice(0, 32);
-}
-
-function sanitizeState(nextState) {
-  const clean = clone(nextState);
-  clean.thoughts = Array.isArray(clean.thoughts) ? clean.thoughts : [];
-  clean.links = Array.isArray(clean.links) ? clean.links : [];
-  clean.view = clean.view || { x: 0, y: 0, scale: 1 };
-  clean.kinds = sanitizeKindDefinitions(clean.kinds, clean.thoughts);
-  clean.defaultKindId = clean.kinds.some((kind) => kind.id === clean.defaultKindId)
-    ? clean.defaultKindId
-    : clean.kinds[0]?.id || DEFAULT_KIND_ID;
-  const previousSettings = clean.settings || {};
-  clean.settings = {
-    theme: ["light", "dark"].includes(previousSettings.theme) ? previousSettings.theme : "light",
-    background: [
-      "pastel-mint",
-      "calm",
-      "pastel-sky",
-      "pastel-blush",
-      "fireflies",
-      "leaves",
-      "blackhole",
-      "aurora",
-      "rain",
-      "snow",
-      "nebula",
-      "starfield",
-      "ocean",
-    ].includes(previousSettings.background)
-      ? previousSettings.background
-      : "calm",
-    calmMode: typeof previousSettings.calmMode === "boolean" ? previousSettings.calmMode : true,
-    lineThickness: clamp(Number(previousSettings.lineThickness) || 1.5, 1, 8),
-    connectionType: ["straight", "curve"].includes(previousSettings.connectionType)
-      ? previousSettings.connectionType
-      : "curve",
-    lineEndpoint: ["floating", "touching"].includes(previousSettings.lineEndpoint)
-      ? previousSettings.lineEndpoint
-      : "floating",
-  };
-  clean.thoughts = clean.thoughts.map((thought, index) => ({
-    id: thought.id || makeId("t"),
-    title: String(thought.title || "Untitled").slice(0, 80),
-    kind: clean.kinds.some((kind) => kind.id === thought.kind) ? thought.kind : clean.defaultKindId,
-    note: String(thought.note || ""),
-    tags: normalizeTags(thought.tags),
-    x: Number.isFinite(thought.x) ? thought.x : index * 120,
-    y: Number.isFinite(thought.y) ? thought.y : index * 80,
-  }));
-  const ids = new Set(clean.thoughts.map((thought) => thought.id));
-  clean.links = clean.links
-    .filter((link) => ids.has(link.from) && ids.has(link.to) && link.from !== link.to)
-    .map((link) => ({
-      id: link.id || makeId("l"),
-      from: link.from,
-      to: link.to,
-      type: link.type === "related" ? "related" : "parent",
-      name: String(link.name || "").slice(0, 80),
-    }));
-  if (!ids.has(clean.selectedId)) {
-    clean.selectedId = clean.thoughts[0]?.id || null;
-  }
-  return clean;
 }
 
 function bindEvents() {
@@ -2200,22 +2055,6 @@ function getAllTags() {
   return [...new Set(state.thoughts.flatMap((thought) => thought.tags || []))].sort((a, b) => a.localeCompare(b));
 }
 
-function normalizeKindName(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .slice(0, 32);
-}
-
-function sanitizeKindId(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 36);
-}
-
 function getUniqueKindId(name) {
   const base = sanitizeKindId(name) || `kind-${state.kinds.length + 1}`;
   let id = base;
@@ -2225,10 +2064,6 @@ function getUniqueKindId(name) {
     suffix += 1;
   }
   return id;
-}
-
-function sanitizeKindColor(color, fallback = defaultKindDefinitions[0].color) {
-  return /^#[0-9a-f]{6}$/i.test(String(color || "")) ? String(color).toLowerCase() : fallback;
 }
 
 function getNextKindColor() {
@@ -2242,17 +2077,6 @@ function colorWithAlpha(color, alpha) {
   const g = (value >> 8) & 255;
   const b = value & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function normalizeTags(value) {
-  const source = Array.isArray(value) ? value.join(",") : String(value || "");
-  return [...new Set(
-    source
-      .split(/[,#]/)
-      .map((tag) => tag.trim().toLowerCase())
-      .filter(Boolean)
-      .map((tag) => tag.replace(/\s+/g, "-").slice(0, 32)),
-  )].slice(0, 12);
 }
 
 function optionElement(value, text) {
@@ -3293,25 +3117,13 @@ function svg(tag: string, attrs: SvgAttrs = {}, text?: string): SVGElement {
   return element;
 }
 
-function makeId(prefix) {
-  const id =
-    window.crypto && "randomUUID" in window.crypto
-      ? window.crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}-${id}`;
-}
-
-function clone<T>(value: T): T {
-  return "structuredClone" in window ? structuredClone(value) : JSON.parse(JSON.stringify(value));
-}
-
 function trimLabel(label, length) {
   return label.length > length ? `${label.slice(0, length - 1)}...` : label;
 }
 
 function showNotePreview(text) {
   els.notePreview.innerHTML = text && text.trim()
-    ? renderMarkdown(text)
+    ? renderMarkdown(text, getThoughtByTitle)
     : '<p class="note-empty">Nothing yet — click to write. Markdown supported.</p>';
   els.notePreview.hidden = false;
   els.noteInput.hidden = true;
@@ -3322,145 +3134,4 @@ function startNoteEditing() {
   els.notePreview.hidden = true;
   els.noteInput.hidden = false;
   els.noteInput.focus();
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function unescapeHtml(text) {
-  return String(text)
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
-}
-
-// Inline markdown on already HTML-escaped text: code, bold, italic, strikethrough, links.
-function renderInline(text) {
-  return text
-    .replace(/\[\[([^\]]+)\]\]/g, (_, label) => {
-      const thought = getThoughtByTitle(unescapeHtml(label));
-      if (!thought) return `<span class="mention-missing">[[${label}]]</span>`;
-      return `<button type="button" class="mention-link" data-mention-id="${thought.id}">${label}</button>`;
-    })
-    .replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`)
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/_([^_]+)_/g, "<em>$1</em>")
-    .replace(/~~([^~]+)~~/g, "<del>$1</del>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
-      const safe = /^(https?:|mailto:|\/|#)/i.test(url) ? url : "#";
-      return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-    });
-}
-
-// Minimal, dependency-free markdown -> HTML for notes. Supports headings, lists,
-// blockquotes, fenced code, horizontal rules, paragraphs, and inline formatting.
-// Input is HTML-escaped up front so rendered notes can't inject markup.
-function renderMarkdown(source) {
-  const lines = escapeHtml(source).replace(/\r\n?/g, "\n").split("\n");
-  const out = [];
-  let listType = null;
-  let paragraph = [];
-
-  const flushParagraph = () => {
-    if (paragraph.length) {
-      out.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
-      paragraph = [];
-    }
-  };
-  const closeList = () => {
-    if (listType) {
-      out.push(`</${listType}>`);
-      listType = null;
-    }
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    if (/^```/.test(trimmed)) {
-      flushParagraph();
-      closeList();
-      const code = [];
-      i += 1;
-      while (i < lines.length && !/^```/.test(lines[i].trim())) {
-        code.push(lines[i]);
-        i += 1;
-      }
-      out.push(`<pre><code>${code.join("\n")}</code></pre>`);
-      continue;
-    }
-
-    if (!trimmed) {
-      flushParagraph();
-      closeList();
-      continue;
-    }
-
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-      flushParagraph();
-      closeList();
-      out.push("<hr />");
-      continue;
-    }
-
-    const heading = trimmed.match(/^(#{1,6})\s+(.*)$/);
-    if (heading) {
-      flushParagraph();
-      closeList();
-      const level = heading[1].length;
-      out.push(`<h${level}>${renderInline(heading[2].trim())}</h${level}>`);
-      continue;
-    }
-
-    const blockquote = line.match(/^\s*>\s?(.*)$/);
-    if (blockquote) {
-      flushParagraph();
-      closeList();
-      const quote = [blockquote[1]];
-      while (i + 1 < lines.length && /^\s*>\s?/.test(lines[i + 1])) {
-        quote.push(lines[i + 1].replace(/^\s*>\s?/, ""));
-        i += 1;
-      }
-      out.push(`<blockquote>${renderInline(quote.join(" "))}</blockquote>`);
-      continue;
-    }
-
-    const task = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/);
-    const ordered = line.match(/^\s*\d+\.\s+(.*)$/);
-    const unordered = line.match(/^\s*[-*+]\s+(.*)$/);
-    if (task || ordered || unordered) {
-      flushParagraph();
-      const type = ordered ? "ol" : "ul";
-      if (listType !== type) {
-        closeList();
-        out.push(`<${type}>`);
-        listType = type;
-      }
-      if (task) {
-        const checked = task[1].toLowerCase() === "x" ? " checked" : "";
-        out.push(`<li class="task-item"><input type="checkbox" disabled${checked} />${renderInline(task[2].trim())}</li>`);
-      } else {
-        out.push(`<li>${renderInline((ordered ? ordered[1] : unordered[1]).trim())}</li>`);
-      }
-      continue;
-    }
-
-    closeList();
-    paragraph.push(trimmed);
-  }
-
-  flushParagraph();
-  closeList();
-  return out.join("\n");
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
 }

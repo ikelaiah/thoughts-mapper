@@ -2546,42 +2546,224 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
 
 .note-workspace-body {
   display: grid;
-  grid-template-columns: minmax(360px, 1.12fr) minmax(320px, 0.88fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   padding: 14px;
 }
 
-.note-workspace-editor,
-.note-workspace-preview-panel {
+.note-workspace-editor {
   min-width: 0;
   min-height: 0;
-}
-
-.note-workspace-editor {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.note-workspace-editor textarea {
+.note-live-editor {
   height: 100%;
   min-height: 0;
-  resize: none;
-  padding: 18px;
+  padding: 26px clamp(18px, 4vw, 56px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  color: var(--ink);
   font-size: 16px;
-  line-height: 1.58;
+  font-weight: 450;
+  line-height: 1.65;
+  caret-color: var(--accent);
+  text-transform: none;
 }
 
-.note-workspace-preview-panel {
+.note-live-editor:focus-visible {
+  outline: 3px solid rgba(47, 143, 131, 0.22);
+  outline-offset: 2px;
+}
+
+.note-live-line {
+  min-height: 1.65em;
+  margin: 0.08em 0;
+  outline: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.note-live-line.heading {
+  margin: 0.5em 0 0.18em;
+  color: var(--ink);
+  font-weight: 780;
+  line-height: 1.2;
+}
+
+.note-live-token {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+.note-live-line.heading .heading-token {
+  font-size: 0.72em;
+  opacity: 0.42;
+}
+
+.note-live-line.heading-1 {
+  font-size: 30px;
+}
+
+.note-live-line.heading-2 {
+  font-size: 25px;
+}
+
+.note-live-line.heading-3 {
+  font-size: 21px;
+}
+
+.note-live-line.heading-4 {
+  font-size: 18px;
+}
+
+.note-live-line.heading-5,
+.note-live-line.heading-6 {
+  font-size: 16px;
+}
+
+.note-live-line.quote {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 7px;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
 }
 
-.note-workspace-preview {
-  min-height: 0;
-  padding: 18px;
-  font-size: 15px;
-  line-height: 1.6;
+.note-live-line.unordered-list,
+.note-live-line.ordered-list,
+.note-live-line.task {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
+  padding-left: 0;
+}
+
+.note-live-content {
+  min-width: 0;
+}
+
+.note-live-token.prefix {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.note-live-line.unordered-list .unordered-prefix,
+.note-live-line.task .task-prefix {
+  position: relative;
+  width: 1.2em;
+  overflow: hidden;
+  color: transparent;
+  opacity: 1;
+}
+
+.note-live-line.unordered-list .unordered-prefix::after {
+  position: absolute;
+  left: 0.25em;
+  color: var(--ink);
+  content: "•";
+}
+
+.note-live-line.task .task-prefix::after {
+  position: absolute;
+  top: 0.35em;
+  left: 0.05em;
+  display: grid;
+  place-items: center;
+  width: 0.95em;
+  height: 0.95em;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--accent-strong);
+  font-size: 0.72em;
+  font-weight: 800;
+  line-height: 1;
+  content: "";
+}
+
+.note-live-line.task.checked .task-prefix::after {
+  border-color: var(--accent);
+  background: var(--badge-bg);
+  content: "✓";
+}
+
+.note-live-line.task.checked .note-live-content {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.note-live-line.rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 1.4em;
+}
+
+.note-live-line.rule .rule-token {
+  width: 2.4em;
+  overflow: hidden;
+  color: transparent;
+  opacity: 1;
+}
+
+.note-live-line.rule::after {
+  flex: 1;
+  border-top: 1px solid var(--line-strong);
+  content: "";
+}
+
+.note-live-line.code-fence {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.note-live-styled.bold {
+  font-weight: 760;
+}
+
+.note-live-styled.italic {
+  font-style: italic;
+}
+
+.note-live-styled.bold.italic {
+  font-style: italic;
+  font-weight: 760;
+}
+
+.note-live-styled.strike {
+  text-decoration: line-through;
+}
+
+.note-live-styled.code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.note-live-styled.link {
+  color: var(--accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.note-live-styled.mention {
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--badge-bg);
+  color: var(--accent-strong);
+  font-weight: 680;
+}
+
+.note-live-styled.mention.missing {
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--muted);
 }
 
 .inbox-placement,
@@ -3327,15 +3509,24 @@ input[type="range"] {
 
   .note-workspace-body {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(48vh, 1fr) minmax(180px, 0.72fr);
-    gap: 10px;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   }
 
-  .note-workspace-editor textarea,
-  .note-workspace-preview {
+  .note-live-editor {
     padding: 13px;
     font-size: 15px;
+  }
+
+  .note-live-line.heading-1 {
+    font-size: 25px;
+  }
+
+  .note-live-line.heading-2 {
+    font-size: 22px;
+  }
+
+  .note-live-line.heading-3 {
+    font-size: 19px;
   }
 
   .link-form {

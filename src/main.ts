@@ -199,7 +199,6 @@ const els: AppElements = {
   noteWorkspace: qs("#noteWorkspace"),
   noteWorkspaceTitle: qs("#noteWorkspaceTitle"),
   noteWorkspaceInput: qs("#noteWorkspaceInput"),
-  noteWorkspacePreview: qs("#noteWorkspacePreview"),
   closeNoteWorkspaceButton: qs("#closeNoteWorkspaceButton"),
   linkForm: qs("#linkForm"),
   linkTargetInput: qs("#linkTargetInput"),
@@ -482,28 +481,20 @@ function bindEvents() {
       }
     },
     onNoteWorkspaceInput: () => {
-      updateSelectedNote(els.noteWorkspaceInput.value, "workspace");
+      updateSelectedNote(getLiveEditorMarkdown(), "workspace", getLiveEditorCaretOffset());
     },
-    onNoteWorkspacePreviewClick: (event) => {
-      const mention = getClosestElement(event.target, "[data-mention-id]");
-      if (mention) {
-        event.stopPropagation();
-        selectThought(mention.dataset.mentionId);
-        return;
+    onNoteWorkspaceKeydown: (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        insertLiveEditorText("\n");
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        insertLiveEditorText("  ");
       }
-      els.noteWorkspaceInput.focus();
     },
-    onNoteWorkspacePreviewKeydown: (event) => {
-      const mention = getClosestElement(event.target, "[data-mention-id]");
-      if (mention && (event.key === "Enter" || event.key === " ")) {
-        event.preventDefault();
-        selectThought(mention.dataset.mentionId);
-        return;
-      }
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        els.noteWorkspaceInput.focus();
-      }
+    onNoteWorkspacePaste: (event) => {
+      event.preventDefault();
+      insertLiveEditorText(event.clipboardData?.getData("text/plain") || "");
     },
     onLinkSubmit: (event) => {
       event.preventDefault();
@@ -1041,7 +1032,7 @@ function renderDetails() {
   renderMentionPanels(selected);
 }
 
-function updateSelectedNote(value: string, source: "compact" | "workspace") {
+function updateSelectedNote(value: string, source: "compact" | "workspace", caretOffset?: number) {
   const selected = getSelectedThought();
   if (!selected) return;
   pushHistory();
@@ -1050,12 +1041,14 @@ function updateSelectedNote(value: string, source: "compact" | "workspace") {
     els.noteInput.value = value;
     showNotePreview(value);
   }
-  if (source !== "workspace" && document.activeElement !== els.noteWorkspaceInput) {
-    els.noteWorkspaceInput.value = value;
+  if (source === "workspace") {
+    setLiveEditorMarkdown(value);
+    if (caretOffset !== undefined) setLiveEditorCaretOffset(caretOffset);
+  } else if (document.activeElement !== els.noteWorkspaceInput) {
+    setLiveEditorMarkdown(value);
   }
   renderThoughtList();
   renderMentionPanels(selected);
-  showNoteWorkspacePreview(value);
   persistState();
 }
 
@@ -1072,8 +1065,7 @@ function openNoteWorkspace() {
   renderNoteWorkspace();
   requestAnimationFrame(() => {
     els.noteWorkspaceInput.focus();
-    els.noteWorkspaceInput.selectionStart = els.noteWorkspaceInput.value.length;
-    els.noteWorkspaceInput.selectionEnd = els.noteWorkspaceInput.value.length;
+    setLiveEditorCaretOffset(selected.note.length);
   });
 }
 
@@ -1092,9 +1084,311 @@ function renderNoteWorkspace() {
   if (!selected || !open) return;
   els.noteWorkspaceTitle.textContent = selected.title || "Untitled";
   if (document.activeElement !== els.noteWorkspaceInput) {
-    els.noteWorkspaceInput.value = selected.note;
+    setLiveEditorMarkdown(selected.note);
   }
-  showNoteWorkspacePreview(selected.note);
+}
+
+function insertLiveEditorText(text: string) {
+  const selection = getLiveEditorSelectionOffsets();
+  const value = getLiveEditorMarkdown();
+  const normalizedText = String(text || "").replace(/\r\n?/g, "\n");
+  const nextValue = `${value.slice(0, selection.start)}${normalizedText}${value.slice(selection.end)}`;
+  updateSelectedNote(nextValue, "workspace", selection.start + normalizedText.length);
+}
+
+function setLiveEditorMarkdown(value: string) {
+  const normalized = String(value || "").replace(/\r\n?/g, "\n");
+  const lines = normalized.split("\n");
+  const fragment = document.createDocumentFragment();
+  (lines.length ? lines : [""]).forEach((line) => fragment.append(createLiveEditorLine(line)));
+  els.noteWorkspaceInput.replaceChildren(fragment);
+  els.noteWorkspaceInput.classList.toggle("empty", !normalized.trim());
+}
+
+function createLiveEditorLine(text: string): HTMLElement {
+  const line = document.createElement("div");
+  line.className = `note-live-line ${getLiveEditorLineClass(text)}`.trim();
+  if (text) {
+    line.append(renderLiveEditorLineContent(text));
+  } else {
+    line.append(document.createElement("br"));
+  }
+  return line;
+}
+
+function getLiveEditorLineClass(text: string): string {
+  const line = String(text || "").replace(/\u00a0/g, " ");
+  const heading = line.match(/^(#{1,6})\s/);
+  if (heading) return `heading heading-${heading[1].length}`;
+  if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) return "rule";
+  if (/^\s*>\s?/.test(line)) return "quote";
+  const task = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+/);
+  if (task) return `task${task[1].toLowerCase() === "x" ? " checked" : ""}`;
+  if (/^\s*\d+\.\s+/.test(line)) return "ordered-list";
+  if (/^\s*[-*+]\s+/.test(line)) return "unordered-list";
+  if (/^```/.test(line.trim())) return "code-fence";
+  return "";
+}
+
+function renderLiveEditorLineContent(text: string): DocumentFragment {
+  const fragment = document.createDocumentFragment();
+  const line = String(text || "").replace(/\u00a0/g, " ");
+
+  const heading = line.match(/^(#{1,6})(\s+)(.*)$/);
+  if (heading) {
+    appendLiveToken(fragment, `${heading[1]}${heading[2]}`, "heading-token");
+    appendLiveInlineMarkdown(fragment, heading[3]);
+    return fragment;
+  }
+
+  if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+    appendLiveToken(fragment, line, "rule-token");
+    return fragment;
+  }
+
+  const task = line.match(/^(\s*[-*+]\s+\[[ xX]\]\s+)(.*)$/);
+  if (task) {
+    appendLiveToken(fragment, task[1], "prefix task-prefix");
+    appendLiveInlineContainer(fragment, task[2]);
+    return fragment;
+  }
+
+  const ordered = line.match(/^(\s*\d+\.\s+)(.*)$/);
+  if (ordered) {
+    appendLiveToken(fragment, ordered[1], "prefix ordered-prefix");
+    appendLiveInlineContainer(fragment, ordered[2]);
+    return fragment;
+  }
+
+  const unordered = line.match(/^(\s*[-*+]\s+)(.*)$/);
+  if (unordered) {
+    appendLiveToken(fragment, unordered[1], "prefix unordered-prefix");
+    appendLiveInlineContainer(fragment, unordered[2]);
+    return fragment;
+  }
+
+  const quote = line.match(/^(\s*>\s?)(.*)$/);
+  if (quote) {
+    appendLiveToken(fragment, quote[1], "prefix quote-prefix");
+    appendLiveInlineContainer(fragment, quote[2]);
+    return fragment;
+  }
+
+  const codeFence = line.match(/^(\s*```)(.*)$/);
+  if (codeFence) {
+    appendLiveToken(fragment, codeFence[1], "code-fence-token");
+    appendLiveInlineMarkdown(fragment, codeFence[2]);
+    return fragment;
+  }
+
+  appendLiveInlineMarkdown(fragment, line);
+  return fragment;
+}
+
+function appendLiveInlineContainer(parent: Node, text: string) {
+  const content = document.createElement("span");
+  content.className = "note-live-content";
+  appendLiveInlineMarkdown(content, text);
+  parent.appendChild(content);
+}
+
+function appendLiveInlineMarkdown(parent: Node, text: string) {
+  const source = String(text || "");
+  const pattern = /(\[\[[^\]]+\]\]|`[^`]+`|\*\*\*[^*]+\*\*\*|___[^_]+___|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\[[^\]]+\]\([^) \t\n]+\)|\*[^*]+\*|_[^_]+_)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(source))) {
+    if (match.index > cursor) {
+      parent.appendChild(document.createTextNode(source.slice(cursor, match.index)));
+    }
+    appendLiveInlineToken(parent, match[0]);
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < source.length) {
+    parent.appendChild(document.createTextNode(source.slice(cursor)));
+  }
+}
+
+function appendLiveInlineToken(parent: Node, token: string) {
+  if (token.startsWith("[[") && token.endsWith("]]")) {
+    const label = token.slice(2, -2);
+    appendLiveToken(parent, "[[", "inline-token");
+    appendLiveStyledText(parent, label, getThoughtByTitle(label) ? "mention" : "mention missing");
+    appendLiveToken(parent, "]]", "inline-token");
+    return;
+  }
+
+  if (token.startsWith("`") && token.endsWith("`")) {
+    appendLiveToken(parent, "`", "inline-token");
+    appendLiveStyledText(parent, token.slice(1, -1), "code");
+    appendLiveToken(parent, "`", "inline-token");
+    return;
+  }
+
+  if ((token.startsWith("***") && token.endsWith("***")) || (token.startsWith("___") && token.endsWith("___"))) {
+    appendLiveToken(parent, token.slice(0, 3), "inline-token");
+    appendLiveStyledText(parent, token.slice(3, -3), "bold italic");
+    appendLiveToken(parent, token.slice(-3), "inline-token");
+    return;
+  }
+
+  if ((token.startsWith("**") && token.endsWith("**")) || (token.startsWith("__") && token.endsWith("__"))) {
+    appendLiveToken(parent, token.slice(0, 2), "inline-token");
+    appendLiveStyledText(parent, token.slice(2, -2), "bold");
+    appendLiveToken(parent, token.slice(-2), "inline-token");
+    return;
+  }
+
+  if (token.startsWith("~~") && token.endsWith("~~")) {
+    appendLiveToken(parent, "~~", "inline-token");
+    appendLiveStyledText(parent, token.slice(2, -2), "strike");
+    appendLiveToken(parent, "~~", "inline-token");
+    return;
+  }
+
+  const link = token.match(/^\[([^\]]+)\]\(([^) \t\n]+)\)$/);
+  if (link) {
+    appendLiveToken(parent, "[", "inline-token");
+    appendLiveStyledText(parent, link[1], "link");
+    appendLiveToken(parent, `](${link[2]})`, "inline-token");
+    return;
+  }
+
+  if ((token.startsWith("*") && token.endsWith("*")) || (token.startsWith("_") && token.endsWith("_"))) {
+    appendLiveToken(parent, token[0], "inline-token");
+    appendLiveStyledText(parent, token.slice(1, -1), "italic");
+    appendLiveToken(parent, token.slice(-1), "inline-token");
+    return;
+  }
+
+  parent.appendChild(document.createTextNode(token));
+}
+
+function appendLiveToken(parent: Node, text: string, className = "") {
+  const token = document.createElement("span");
+  token.className = `note-live-token ${className}`.trim();
+  token.textContent = text;
+  parent.appendChild(token);
+}
+
+function appendLiveStyledText(parent: Node, text: string, className: string) {
+  const span = document.createElement("span");
+  span.className = `note-live-styled ${className}`.trim();
+  span.textContent = text;
+  parent.appendChild(span);
+}
+
+function getLiveEditorLines(): HTMLElement[] {
+  return [...els.noteWorkspaceInput.querySelectorAll<HTMLElement>(".note-live-line")];
+}
+
+function getLiveLineText(line: HTMLElement): string {
+  return (line.textContent || "").replace(/\u00a0/g, " ");
+}
+
+function getLiveEditorMarkdown(): string {
+  const lines = getLiveEditorLines();
+  if (lines.length) return lines.map(getLiveLineText).join("\n");
+  return (els.noteWorkspaceInput.textContent || "").replace(/\r\n?/g, "\n");
+}
+
+function getLiveEditorSelectionOffsets(): { start: number; end: number } {
+  const selection = window.getSelection();
+  if (!selection || !selection.anchorNode || !selection.focusNode) {
+    const end = getLiveEditorMarkdown().length;
+    return { start: end, end };
+  }
+  if (!els.noteWorkspaceInput.contains(selection.anchorNode) || !els.noteWorkspaceInput.contains(selection.focusNode)) {
+    const end = getLiveEditorMarkdown().length;
+    return { start: end, end };
+  }
+  const anchor = getLiveEditorOffsetForNode(selection.anchorNode, selection.anchorOffset);
+  const focus = getLiveEditorOffsetForNode(selection.focusNode, selection.focusOffset);
+  return {
+    start: Math.min(anchor, focus),
+    end: Math.max(anchor, focus),
+  };
+}
+
+function getLiveEditorCaretOffset(): number {
+  return getLiveEditorSelectionOffsets().end;
+}
+
+function getLiveEditorOffsetForNode(node: Node, nodeOffset: number): number {
+  const lines = getLiveEditorLines();
+  const line = getLiveEditorLineFromNode(node);
+  const lineIndex = line ? lines.indexOf(line) : -1;
+  if (!line || lineIndex < 0) return getLiveEditorMarkdown().length;
+  const previousOffset = lines
+    .slice(0, lineIndex)
+    .reduce((total, item) => total + getLiveLineText(item).length + 1, 0);
+
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    range.setEnd(node, nodeOffset);
+    return previousOffset + range.toString().length;
+  } catch {
+    return previousOffset + getLiveLineText(line).length;
+  }
+}
+
+function getLiveEditorLineFromNode(node: Node | null): HTMLElement | null {
+  if (!node) return null;
+  const element = node instanceof Element ? node : node.parentElement;
+  return element?.closest(".note-live-line") as HTMLElement | null;
+}
+
+function setLiveEditorCaretOffset(offset: number) {
+  const lines = getLiveEditorLines();
+  if (!lines.length) return;
+  let remaining = clamp(offset, 0, getLiveEditorMarkdown().length);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const text = getLiveLineText(line);
+    if (remaining <= text.length || index === lines.length - 1) {
+      setCaretInLiveEditorLine(line, remaining);
+      return;
+    }
+    remaining -= text.length + 1;
+  }
+}
+
+function setCaretInLiveEditorLine(line: HTMLElement, offset: number) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+
+  const targetOffset = clamp(offset, 0, getLiveLineText(line).length);
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+  let remaining = targetOffset;
+  let lastTextNode: Text | null = null;
+  let current = walker.nextNode() as Text | null;
+
+  while (current) {
+    lastTextNode = current;
+    if (remaining <= current.data.length) {
+      range.setStart(current, remaining);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    remaining -= current.data.length;
+    current = walker.nextNode() as Text | null;
+  }
+
+  if (lastTextNode) {
+    range.setStart(lastTextNode, lastTextNode.data.length);
+  } else {
+    range.setStart(line, 0);
+  }
+
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 function renderKindInspector(selected) {
@@ -3205,12 +3499,6 @@ function showNotePreview(text) {
     : '<p class="note-empty">Nothing yet — click to write. Markdown supported.</p>';
   els.notePreview.hidden = false;
   els.noteInput.hidden = true;
-}
-
-function showNoteWorkspacePreview(text) {
-  els.noteWorkspacePreview.innerHTML = text && text.trim()
-    ? renderMarkdown(text, getThoughtByTitle)
-    : '<p class="note-empty">Nothing yet — click to write. Markdown supported.</p>';
 }
 
 function startNoteEditing() {

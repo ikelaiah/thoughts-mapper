@@ -48,8 +48,8 @@ export type UiEventHandlers = {
   onNotePreviewClick: (event: MouseEvent) => void;
   onNotePreviewKeydown: (event: KeyboardEvent) => void;
   onNoteWorkspaceInput: () => void;
-  onNoteWorkspacePreviewClick: (event: MouseEvent) => void;
-  onNoteWorkspacePreviewKeydown: (event: KeyboardEvent) => void;
+  onNoteWorkspaceKeydown: (event: KeyboardEvent) => void;
+  onNoteWorkspacePaste: (event: ClipboardEvent) => void;
   onLinkSubmit: (event: SubmitEvent) => void;
   renderRelationshipPreviews: () => void;
   placeInboxThought: () => void;
@@ -130,8 +130,8 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.notePreview.addEventListener("click", handlers.onNotePreviewClick);
   els.notePreview.addEventListener("keydown", handlers.onNotePreviewKeydown);
   els.noteWorkspaceInput.addEventListener("input", handlers.onNoteWorkspaceInput);
-  els.noteWorkspacePreview.addEventListener("click", handlers.onNoteWorkspacePreviewClick);
-  els.noteWorkspacePreview.addEventListener("keydown", handlers.onNoteWorkspacePreviewKeydown);
+  els.noteWorkspaceInput.addEventListener("keydown", handlers.onNoteWorkspaceKeydown);
+  els.noteWorkspaceInput.addEventListener("paste", handlers.onNoteWorkspacePaste);
   els.linkForm.addEventListener("submit", handlers.onLinkSubmit);
   els.linkTargetInput.addEventListener("input", handlers.renderRelationshipPreviews);
   els.linkTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);

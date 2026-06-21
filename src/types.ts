@@ -229,8 +229,7 @@ export type AppElements = {
   notePreview: HTMLElement;
   noteWorkspace: HTMLElement;
   noteWorkspaceTitle: HTMLElement;
-  noteWorkspaceInput: HTMLTextAreaElement;
-  noteWorkspacePreview: HTMLElement;
+  noteWorkspaceInput: HTMLElement;
   closeNoteWorkspaceButton: HTMLButtonElement;
   linkForm: HTMLFormElement;
   linkTargetInput: HTMLInputElement;

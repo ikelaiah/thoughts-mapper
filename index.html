@@ -176,7 +176,10 @@
           </section>
 
           <div class="field field-notes">
-            <span>Notes</span>
+            <div class="note-field-header">
+              <span>Notes</span>
+              <button id="openNoteWorkspaceButton" type="button">Open note</button>
+            </div>
             <div
               id="notePreview"
               class="note-preview"
@@ -226,6 +229,30 @@
 
       <button id="mobileScrim" class="mobile-scrim" type="button" aria-label="Close panel" hidden></button>
     </div>
+
+    <section id="noteWorkspace" class="note-workspace" hidden aria-label="Note workspace">
+      <div class="note-workspace-panel">
+        <header class="note-workspace-header">
+          <div>
+            <span>Note workspace</span>
+            <h2 id="noteWorkspaceTitle">Untitled</h2>
+          </div>
+          <button id="closeNoteWorkspaceButton" type="button" aria-label="Close note workspace">Close</button>
+        </header>
+        <div class="note-workspace-body">
+          <label class="field note-workspace-editor">
+            <span>Write</span>
+            <textarea id="noteWorkspaceInput" spellcheck="true"></textarea>
+          </label>
+          <section class="note-workspace-preview-panel" aria-label="Note preview">
+            <div class="section-heading">
+              <span>Preview</span>
+            </div>
+            <div id="noteWorkspacePreview" class="note-preview note-workspace-preview" tabindex="0"></div>
+          </section>
+        </div>
+      </div>
+    </section>
 
     <form id="mobileCaptureForm" class="mobile-capture" hidden>
       <input id="mobileCaptureInput" type="text" maxlength="80" placeholder="Capture a thought..." autocomplete="off" />

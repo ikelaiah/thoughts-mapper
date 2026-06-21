@@ -2314,6 +2314,21 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   min-height: 0;
 }
 
+.note-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.note-field-header button {
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 680;
+}
+
 .field-notes .note-preview,
 .field-notes textarea {
   min-height: 240px;
@@ -2466,6 +2481,107 @@ body[data-background="ocean"] .ambient-layer span:nth-child(6) { left: 92%; bott
   margin: 0;
   color: var(--muted);
   font-style: italic;
+}
+
+.note-workspace {
+  position: fixed;
+  inset: 16px;
+  z-index: 30;
+  display: grid;
+  place-items: stretch;
+  border: 0;
+  border-radius: 0;
+  background: rgba(16, 24, 31, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.note-workspace[hidden] {
+  display: none;
+}
+
+.note-workspace-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.note-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-glass);
+  backdrop-filter: blur(16px);
+}
+
+.note-workspace-header > div {
+  min-width: 0;
+}
+
+.note-workspace-header span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.note-workspace-header h2 {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-workspace-body {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.12fr) minmax(320px, 0.88fr);
+  gap: 14px;
+  min-height: 0;
+  padding: 14px;
+}
+
+.note-workspace-editor,
+.note-workspace-preview-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.note-workspace-editor {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.note-workspace-editor textarea {
+  height: 100%;
+  min-height: 0;
+  resize: none;
+  padding: 18px;
+  font-size: 16px;
+  line-height: 1.58;
+}
+
+.note-workspace-preview-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 7px;
+}
+
+.note-workspace-preview {
+  min-height: 0;
+  padding: 18px;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 .inbox-placement,
@@ -3182,6 +3298,44 @@ input[type="range"] {
   .field-notes .note-preview,
   .field-notes textarea {
     min-height: 160px;
+  }
+
+  .note-workspace {
+    inset: 0;
+    z-index: 32;
+  }
+
+  .note-workspace-panel {
+    border-width: 0;
+    border-radius: 0;
+  }
+
+  .note-workspace-header {
+    min-height: 58px;
+    padding: max(10px, env(safe-area-inset-top)) 12px 10px;
+  }
+
+  .note-workspace-header h2 {
+    font-size: 17px;
+  }
+
+  .note-workspace-header button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 10px;
+  }
+
+  .note-workspace-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(48vh, 1fr) minmax(180px, 0.72fr);
+    gap: 10px;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .note-workspace-editor textarea,
+  .note-workspace-preview {
+    padding: 13px;
+    font-size: 15px;
   }
 
   .link-form {

@@ -224,8 +224,14 @@ export type AppElements = {
   placeRelationInput: HTMLSelectElement;
   placeThoughtButton: HTMLButtonElement;
   placePreviewText: HTMLElement;
+  openNoteWorkspaceButton: HTMLButtonElement;
   noteInput: HTMLTextAreaElement;
   notePreview: HTMLElement;
+  noteWorkspace: HTMLElement;
+  noteWorkspaceTitle: HTMLElement;
+  noteWorkspaceInput: HTMLTextAreaElement;
+  noteWorkspacePreview: HTMLElement;
+  closeNoteWorkspaceButton: HTMLButtonElement;
   linkForm: HTMLFormElement;
   linkTargetInput: HTMLInputElement;
   linkTargetOptions: HTMLDataListElement;

@@ -114,6 +114,7 @@ let newProjectPanelOpen = false;
 let moreMenuOpen = false;
 let inboxReviewOpen = false;
 let inboxReviewIndex = 0;
+let noteWorkspaceOpen = false;
 const mobileLayoutQuery = window.matchMedia("(max-width: 720px)");
 let mobileLibraryOpen = false;
 let mobileDetailsOpen = false;
@@ -192,8 +193,14 @@ const els: AppElements = {
   placeRelationInput: qs("#placeRelationInput"),
   placeThoughtButton: qs("#placeThoughtButton"),
   placePreviewText: qs("#placePreviewText"),
+  openNoteWorkspaceButton: qs("#openNoteWorkspaceButton"),
   noteInput: qs("#noteInput"),
   notePreview: qs("#notePreview"),
+  noteWorkspace: qs("#noteWorkspace"),
+  noteWorkspaceTitle: qs("#noteWorkspaceTitle"),
+  noteWorkspaceInput: qs("#noteWorkspaceInput"),
+  noteWorkspacePreview: qs("#noteWorkspacePreview"),
+  closeNoteWorkspaceButton: qs("#closeNoteWorkspaceButton"),
   linkForm: qs("#linkForm"),
   linkTargetInput: qs("#linkTargetInput"),
   linkTargetOptions: qs("#linkTargetOptions"),
@@ -445,14 +452,10 @@ function bindEvents() {
       render();
       persistState();
     },
+    openNoteWorkspace,
+    closeNoteWorkspace,
     onNoteInput: () => {
-      const selected = getSelectedThought();
-      if (!selected) return;
-      pushHistory();
-      selected.note = els.noteInput.value;
-      renderThoughtList();
-      renderMentionPanels(selected);
-      persistState();
+      updateSelectedNote(els.noteInput.value, "compact");
     },
     onNoteBlur: () => {
       showNotePreview(els.noteInput.value);
@@ -476,6 +479,30 @@ function bindEvents() {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
         startNoteEditing();
+      }
+    },
+    onNoteWorkspaceInput: () => {
+      updateSelectedNote(els.noteWorkspaceInput.value, "workspace");
+    },
+    onNoteWorkspacePreviewClick: (event) => {
+      const mention = getClosestElement(event.target, "[data-mention-id]");
+      if (mention) {
+        event.stopPropagation();
+        selectThought(mention.dataset.mentionId);
+        return;
+      }
+      els.noteWorkspaceInput.focus();
+    },
+    onNoteWorkspacePreviewKeydown: (event) => {
+      const mention = getClosestElement(event.target, "[data-mention-id]");
+      if (mention && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        selectThought(mention.dataset.mentionId);
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        els.noteWorkspaceInput.focus();
       }
     },
     onLinkSubmit: (event) => {
@@ -535,6 +562,7 @@ function bindEvents() {
         return;
       }
       if (event.key === "Escape") {
+        closeNoteWorkspace();
         closeContextMenu();
         closeSettings();
         closeMoreMenu();
@@ -707,6 +735,7 @@ function render() {
   renderHistoryControls();
   renderThoughtList();
   renderDetails();
+  renderNoteWorkspace();
   renderKindSettings();
   renderInboxReview();
   renderGraph();
@@ -939,6 +968,7 @@ function renderDetails() {
     els.noteInput.value = selected.note;
     showNotePreview(selected.note);
   }
+  els.openNoteWorkspaceButton.disabled = false;
 
   const candidates = state.thoughts.filter((thought) => thought.id !== selected.id).sort((a, b) => a.title.localeCompare(b.title));
   const linkTargetValue = els.linkTargetInput.value;
@@ -1009,6 +1039,62 @@ function renderDetails() {
     }),
   );
   renderMentionPanels(selected);
+}
+
+function updateSelectedNote(value: string, source: "compact" | "workspace") {
+  const selected = getSelectedThought();
+  if (!selected) return;
+  pushHistory();
+  selected.note = value;
+  if (source !== "compact") {
+    els.noteInput.value = value;
+    showNotePreview(value);
+  }
+  if (source !== "workspace" && document.activeElement !== els.noteWorkspaceInput) {
+    els.noteWorkspaceInput.value = value;
+  }
+  renderThoughtList();
+  renderMentionPanels(selected);
+  showNoteWorkspacePreview(value);
+  persistState();
+}
+
+function openNoteWorkspace() {
+  const selected = getSelectedThought();
+  if (!selected) {
+    setStatus("Select a thought first");
+    return;
+  }
+  noteWorkspaceOpen = true;
+  closeContextMenu();
+  closeMoreMenu();
+  closeMobileCapture();
+  renderNoteWorkspace();
+  requestAnimationFrame(() => {
+    els.noteWorkspaceInput.focus();
+    els.noteWorkspaceInput.selectionStart = els.noteWorkspaceInput.value.length;
+    els.noteWorkspaceInput.selectionEnd = els.noteWorkspaceInput.value.length;
+  });
+}
+
+function closeNoteWorkspace() {
+  if (!noteWorkspaceOpen) return;
+  noteWorkspaceOpen = false;
+  renderNoteWorkspace();
+}
+
+function renderNoteWorkspace() {
+  const selected = getSelectedThought();
+  const open = noteWorkspaceOpen && Boolean(selected);
+  if (noteWorkspaceOpen && !selected) noteWorkspaceOpen = false;
+  els.noteWorkspace.hidden = !open;
+  document.body.classList.toggle("note-workspace-open", open);
+  if (!selected || !open) return;
+  els.noteWorkspaceTitle.textContent = selected.title || "Untitled";
+  if (document.activeElement !== els.noteWorkspaceInput) {
+    els.noteWorkspaceInput.value = selected.note;
+  }
+  showNoteWorkspacePreview(selected.note);
 }
 
 function renderKindInspector(selected) {
@@ -1277,6 +1363,7 @@ function selectThought(id: string | null, options: SelectThoughtOptions = {}) {
     openMobileDetails();
     renderThoughtList();
     renderDetails();
+    renderNoteWorkspace();
     renderGraph();
     persistState();
     return;
@@ -1289,6 +1376,7 @@ function selectThought(id: string | null, options: SelectThoughtOptions = {}) {
     const toPositions = computeFocusPositions(id);
     renderThoughtList();
     renderDetails();
+    renderNoteWorkspace();
     animateFocus({
       fromPositions,
       toPositions,
@@ -3117,6 +3205,12 @@ function showNotePreview(text) {
     : '<p class="note-empty">Nothing yet — click to write. Markdown supported.</p>';
   els.notePreview.hidden = false;
   els.noteInput.hidden = true;
+}
+
+function showNoteWorkspacePreview(text) {
+  els.noteWorkspacePreview.innerHTML = text && text.trim()
+    ? renderMarkdown(text, getThoughtByTitle)
+    : '<p class="note-empty">Nothing yet — click to write. Markdown supported.</p>';
 }
 
 function startNoteEditing() {

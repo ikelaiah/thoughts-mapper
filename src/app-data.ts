@@ -24,6 +24,7 @@ const backgroundIds = [
   "nebula",
   "starfield",
   "ocean",
+  "eink",
 ];
 
 type UnknownRecord = Record<string, unknown>;

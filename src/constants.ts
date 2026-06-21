@@ -43,6 +43,7 @@ export const colourSchemes = {
   "light-rain": { theme: "light", background: "rain" },
   "light-snow": { theme: "light", background: "snow" },
   "light-ocean": { theme: "light", background: "ocean" },
+  "light-eink": { theme: "light", background: "eink" },
   "dark-calm": { theme: "dark", background: "calm" },
   "dark-mint": { theme: "dark", background: "pastel-mint" },
   "dark-sky": { theme: "dark", background: "pastel-sky" },
@@ -56,6 +57,7 @@ export const colourSchemes = {
   "dark-nebula": { theme: "dark", background: "nebula" },
   "dark-starfield": { theme: "dark", background: "starfield" },
   "dark-ocean": { theme: "dark", background: "ocean" },
+  "dark-eink": { theme: "dark", background: "eink" },
 };
 
 export const seedState: ProjectState = {

@@ -286,6 +286,15 @@ export function renderGraphView(ctx: GraphRenderContext): void {
 
       if (isActive) {
         group.append(
+          svg("rect", {
+            class: "node-focus-halo",
+            x: -nodeWidth / 2 - 9,
+            y: -nodeHeight / 2 - 9,
+            width: nodeWidth + 18,
+            height: nodeHeight + 18,
+            rx: nodeRadius + 8,
+            ry: nodeRadius + 8,
+          }),
           svg("circle", { class: "node-orbit orbit-one", r: 58 }),
           svg("circle", { class: "node-orbit orbit-two", r: 72 }),
         );

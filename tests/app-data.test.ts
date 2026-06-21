@@ -39,6 +39,21 @@ describe("sanitizeState", () => {
       lineEndpoint: "floating",
     });
   });
+
+  it("preserves e-ink theme settings", () => {
+    const state = sanitizeState({
+      thoughts: [{ id: "a", title: "Alpha" }],
+      settings: {
+        theme: "dark",
+        background: "eink",
+      },
+    });
+
+    expect(state.settings).toMatchObject({
+      theme: "dark",
+      background: "eink",
+    });
+  });
 });
 
 describe("sanitizeAppData", () => {

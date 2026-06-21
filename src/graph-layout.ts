@@ -106,9 +106,8 @@ export function getTrimmedLinkEndpoints(
     return getMinimalLinkEndpoints(from, to, settings);
   }
 
-  const visibleLength = Math.max(28, length * 0.58);
-  const totalGap = Math.max(0, length - visibleLength);
-  const gapPerSide = Math.min(30, totalGap / 2);
+  const floatingGap = clamp(10 + settings.lineThickness * 1.25, 11, 16);
+  const gapPerSide = Math.min(floatingGap, length * 0.18);
   const unitX = dx / length;
   const unitY = dy / length;
   return {
@@ -129,7 +128,7 @@ function getMinimalLinkEndpoints(from: Point, to: Point, settings: Pick<MapSetti
   const length = Math.hypot(dx, dy) || 1;
   const unitX = dx / length;
   const unitY = dy / length;
-  const size = settings.lineEndpoint === "floating" ? 28 : 12;
+  const size = settings.lineEndpoint === "floating" ? 22 : 12;
   const center = {
     x: (from.x + to.x) / 2,
     y: (from.y + to.y) / 2,

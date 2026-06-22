@@ -91,6 +91,10 @@
         <div class="stage-toolbar" aria-label="Map tools">
           <button id="sidebarToggleButton" class="toolbar-icon-button" type="button" title="Hide thoughts sidebar" aria-label="Hide thoughts sidebar">☰</button>
           <button id="detailsToggleButton" class="toolbar-icon-button" type="button" title="Hide thought details" aria-label="Hide thought details">i</button>
+          <div class="stage-view-switch" role="tablist" aria-label="Stage view">
+            <button id="mapViewButton" class="active" type="button" role="tab" aria-selected="true">Map</button>
+            <button id="outlineViewButton" type="button" role="tab" aria-selected="false">Outline</button>
+          </div>
           <button id="fitButton" type="button" title="Fit map" aria-label="Fit map">Fit</button>
           <button id="settingsButton" type="button" title="Open settings" aria-label="Open settings">Settings</button>
           <button id="moreButton" class="toolbar-icon-button" type="button" title="More map tools" aria-label="More map tools">...</button>
@@ -114,6 +118,18 @@
             <g id="nodesLayer"></g>
           </g>
         </svg>
+        <section id="outlineView" class="outline-view" aria-label="Outline view" hidden>
+          <div class="outline-board">
+            <header class="outline-header">
+              <div>
+                <span>Outline</span>
+                <h2 id="outlineTitle">My first map</h2>
+              </div>
+              <p id="outlineSummary">0 thoughts</p>
+            </header>
+            <div id="outlineTree" class="outline-tree"></div>
+          </div>
+        </section>
         <div id="stagePrompt" class="stage-prompt" hidden>Select a thought, or press Ctrl+K to capture.</div>
       </main>
 

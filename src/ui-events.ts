@@ -34,6 +34,8 @@ export type UiEventHandlers = {
   onConnectionTypeChange: () => void;
   onLineEndpointChange: () => void;
   resetViewAndCloseMoreMenu: () => void;
+  showMapView: () => void;
+  showOutlineView: () => void;
   onTitleInput: () => void;
   showDetailsTab: () => void;
   showNotesTab: () => void;
@@ -119,6 +121,8 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.connectionTypeInput.addEventListener("change", handlers.onConnectionTypeChange);
   els.lineEndpointInput.addEventListener("change", handlers.onLineEndpointChange);
   els.resetButton.addEventListener("click", handlers.resetViewAndCloseMoreMenu);
+  els.mapViewButton.addEventListener("click", handlers.showMapView);
+  els.outlineViewButton.addEventListener("click", handlers.showOutlineView);
   els.detailsTabDetails.addEventListener("click", handlers.showDetailsTab);
   els.detailsTabNotes.addEventListener("click", handlers.showNotesTab);
   els.detailsTabLinks.addEventListener("click", handlers.showLinksTab);

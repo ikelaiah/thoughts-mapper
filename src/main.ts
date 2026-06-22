@@ -55,6 +55,7 @@ import type {
   ProjectState,
   RetargetRelation,
   SelectThoughtOptions,
+  StageViewId,
   SvgAttrs,
   Thought,
   ThoughtRenderEffect,
@@ -117,6 +118,7 @@ let inboxReviewOpen = false;
 let inboxReviewIndex = 0;
 let noteWorkspaceOpen = false;
 let activeDetailsTab: DetailsTabId = "details";
+let stageView: StageViewId = "map";
 const mobileLayoutQuery = window.matchMedia("(max-width: 720px)");
 let mobileLibraryOpen = false;
 let mobileDetailsOpen = false;
@@ -162,7 +164,14 @@ const els: AppElements = {
   resetButton: qs("#resetButton"),
   settingsButton: qs("#settingsButton"),
   settingsMenuButton: qs("#settingsMenuButton"),
+  mapStage: qs(".map-stage"),
   stagePrompt: qs("#stagePrompt"),
+  mapViewButton: qs("#mapViewButton"),
+  outlineViewButton: qs("#outlineViewButton"),
+  outlineView: qs("#outlineView"),
+  outlineTitle: qs("#outlineTitle"),
+  outlineSummary: qs("#outlineSummary"),
+  outlineTree: qs("#outlineTree"),
   settingsPage: qs("#settingsPage"),
   settingsCloseButton: qs("#settingsCloseButton"),
   mobileManagement: qs("#mobileManagement"),
@@ -408,6 +417,8 @@ function bindEvents() {
       resetView();
       closeMoreMenu();
     },
+    showMapView: () => setStageView("map"),
+    showOutlineView: () => setStageView("outline"),
     showDetailsTab: () => setDetailsTab("details"),
     showNotesTab: () => setDetailsTab("notes"),
     showLinksTab: () => setDetailsTab("links"),
@@ -737,6 +748,8 @@ function render() {
   renderHistoryControls();
   renderThoughtList();
   renderDetails();
+  renderStageView();
+  renderOutline();
   renderNoteWorkspace();
   renderKindSettings();
   renderInboxReview();
@@ -1042,6 +1055,195 @@ function renderDetails() {
     }),
   );
   renderMentionPanels(selected);
+}
+
+function setStageView(view: StageViewId) {
+  if (stageView === view) return;
+  stageView = view;
+  renderStageView();
+  if (view === "outline") {
+    renderOutline();
+    return;
+  }
+  requestAnimationFrame(() => {
+    measureGraph();
+    renderGraph();
+  });
+}
+
+function renderStageView() {
+  const outlineActive = stageView === "outline";
+  els.mapStage.classList.toggle("outline-mode", outlineActive);
+  els.outlineView.hidden = !outlineActive;
+  els.mapViewButton.classList.toggle("active", !outlineActive);
+  els.outlineViewButton.classList.toggle("active", outlineActive);
+  els.mapViewButton.setAttribute("aria-selected", String(!outlineActive));
+  els.outlineViewButton.setAttribute("aria-selected", String(outlineActive));
+  els.graph.setAttribute("aria-hidden", String(outlineActive));
+  els.fitButton.disabled = outlineActive;
+  els.fitButton.title = outlineActive ? "Switch to map view to fit the map" : "Fit map";
+  els.fitButton.setAttribute("aria-label", els.fitButton.title);
+  els.stagePrompt.hidden = outlineActive || Boolean(getSelectedThought());
+}
+
+function renderOutline() {
+  const project = getActiveProject();
+  const graphThoughts = getGraphThoughts().slice().sort(compareThoughtsByTitle);
+  const inboxThoughts = getInboxThoughts().slice().sort(compareThoughtsByTitle);
+  const roots = getOutlineRoots(graphThoughts);
+  const rootNodes = roots.map((thought) => buildOutlineNode(thought, new Set()));
+  const shownIds = new Set<string>();
+  rootNodes.forEach((node) => collectOutlineIds(node, shownIds));
+  const otherPlaced = graphThoughts.filter((thought) => !shownIds.has(thought.id)).map((thought) => buildOutlineNode(thought, new Set()));
+  const sections = [
+    createOutlineSection("Map roots", rootNodes),
+    createOutlineSection("Other placed thoughts", otherPlaced),
+    createOutlineThoughtSection("Inbox", inboxThoughts),
+  ].filter(Boolean);
+
+  els.outlineTitle.textContent = project.name;
+  els.outlineSummary.textContent = `${graphThoughts.length} placed · ${inboxThoughts.length} inbox`;
+  els.outlineTree.replaceChildren(
+    ...(sections.length
+      ? sections
+      : [outlineEmptyState("No thoughts yet")]),
+  );
+}
+
+function getOutlineRoots(graphThoughts: Thought[]): Thought[] {
+  const graphIds = new Set(graphThoughts.map((thought) => thought.id));
+  const childIds = new Set(
+    state.links
+      .filter((link) => link.type !== "related" && graphIds.has(link.from) && graphIds.has(link.to))
+      .map((link) => link.to),
+  );
+  const roots = graphThoughts.filter((thought) => !childIds.has(thought.id));
+  if (roots.length) return roots;
+  const selected = state.selectedId ? getThought(state.selectedId) : null;
+  return selected && graphIds.has(selected.id) ? [selected] : graphThoughts.slice(0, 1);
+}
+
+function buildOutlineNode(thought: Thought, ancestors: Set<string>) {
+  const nextAncestors = new Set(ancestors);
+  const repeated = nextAncestors.has(thought.id);
+  if (repeated) {
+    return { thought, children: [], repeated };
+  }
+  nextAncestors.add(thought.id);
+  return {
+    thought,
+    repeated: false,
+    children: getChildThoughts(thought.id)
+      .slice()
+      .sort(compareThoughtsByTitle)
+      .map((child) => buildOutlineNode(child, nextAncestors)),
+  };
+}
+
+function collectOutlineIds(node, ids: Set<string>) {
+  ids.add(node.thought.id);
+  node.children.forEach((child) => collectOutlineIds(child, ids));
+}
+
+function createOutlineSection(title: string, nodes) {
+  if (!nodes.length) return null;
+  const section = document.createElement("section");
+  section.className = "outline-section";
+  const heading = document.createElement("div");
+  heading.className = "outline-section-heading";
+  heading.append(spanText(title), spanText(String(nodes.length)));
+  const list = document.createElement("div");
+  list.className = "outline-list";
+  nodes.forEach((node) => list.append(createOutlineNodeElement(node, 0)));
+  section.append(heading, list);
+  return section;
+}
+
+function createOutlineThoughtSection(title: string, thoughts: Thought[]) {
+  if (!thoughts.length) return null;
+  const section = document.createElement("section");
+  section.className = "outline-section";
+  const heading = document.createElement("div");
+  heading.className = "outline-section-heading";
+  heading.append(spanText(title), spanText(String(thoughts.length)));
+  const list = document.createElement("div");
+  list.className = "outline-list";
+  thoughts.forEach((thought) => {
+    list.append(createOutlineThoughtRow(thought, 0));
+  });
+  section.append(heading, list);
+  return section;
+}
+
+function createOutlineNodeElement(node, depth: number) {
+  const item = document.createElement("div");
+  item.className = "outline-node";
+  item.append(createOutlineThoughtRow(node.thought, depth, node.repeated));
+  if (node.children.length) {
+    const children = document.createElement("div");
+    children.className = "outline-children";
+    node.children.forEach((child) => children.append(createOutlineNodeElement(child, depth + 1)));
+    item.append(children);
+  }
+  return item;
+}
+
+function createOutlineThoughtRow(thought: Thought, depth: number, repeated = false) {
+  const row = document.createElement("button");
+  row.className = `outline-row${thought.id === state.selectedId ? " active" : ""}${repeated ? " repeated" : ""}`;
+  row.type = "button";
+  row.style.setProperty("--outline-indent", `${10 + depth * 24}px`);
+  row.addEventListener("click", () => selectThought(thought.id));
+
+  const dot = document.createElement("span");
+  dot.className = "thought-dot";
+  dot.style.background = getKindColor(thought.kind);
+
+  const copy = document.createElement("span");
+  copy.className = "outline-row-copy";
+  const title = document.createElement("span");
+  title.className = "outline-row-title";
+  title.textContent = thought.title;
+  const meta = document.createElement("span");
+  meta.className = "outline-row-meta";
+  meta.textContent = getOutlineMeta(thought, repeated);
+  copy.append(title, meta);
+
+  const count = document.createElement("span");
+  count.className = "outline-row-count";
+  const childCount = getChildThoughts(thought.id).length;
+  count.textContent = childCount ? String(childCount) : "";
+  count.setAttribute("aria-hidden", "true");
+
+  row.append(dot, copy, count);
+  return row;
+}
+
+function getOutlineMeta(thought: Thought, repeated = false) {
+  const parts = [getKindName(thought.kind)];
+  if (thought.tags[0]) parts.push(`#${thought.tags[0]}`);
+  const relatedCount = getRelatedThoughts(thought.id).length;
+  if (relatedCount) parts.push(`${relatedCount} beside`);
+  if (isInboxThought(thought.id)) parts.push("inbox");
+  if (repeated) parts.push("shown above");
+  return parts.join(" · ");
+}
+
+function outlineEmptyState(message: string) {
+  const empty = document.createElement("div");
+  empty.className = "outline-empty";
+  empty.textContent = message;
+  return empty;
+}
+
+function spanText(text: string) {
+  const span = document.createElement("span");
+  span.textContent = text;
+  return span;
+}
+
+function compareThoughtsByTitle(a: Thought, b: Thought) {
+  return a.title.localeCompare(b.title);
 }
 
 function setDetailsTab(tab: DetailsTabId) {
@@ -1571,6 +1773,7 @@ function addThought(title: string, anchorId = state.selectedId, relation: LinkRe
   if (options.select === false) {
     renderThoughtList();
     renderDetails();
+    renderOutline();
     renderGraph();
     persistState();
     return thought;
@@ -1605,6 +1808,7 @@ function addLink(activeId: string | null, targetId: string | null, relation: Lin
   }
   renderThoughtList();
   renderDetails();
+  renderOutline();
   const toPositions = computeFocusPositions(state.selectedId);
   runGraphTransition({
     fromPositions,
@@ -1627,6 +1831,7 @@ function removeConnection(linkId) {
   if (contextLinkId === linkId) contextLinkId = null;
   renderThoughtList();
   renderDetails();
+  renderOutline();
   const toPositions = computeFocusPositions(state.selectedId);
   const dimThoughtIds = [disconnectedId];
   if (state.selectedId && isInboxThought(state.selectedId)) dimThoughtIds.push(state.selectedId);
@@ -1689,6 +1894,8 @@ function selectThought(id: string | null, options: SelectThoughtOptions = {}) {
     openMobileDetails();
     renderThoughtList();
     renderDetails();
+    renderStageView();
+    renderOutline();
     renderNoteWorkspace();
     renderGraph();
     persistState();
@@ -1702,6 +1909,8 @@ function selectThought(id: string | null, options: SelectThoughtOptions = {}) {
     const toPositions = computeFocusPositions(id);
     renderThoughtList();
     renderDetails();
+    renderStageView();
+    renderOutline();
     renderNoteWorkspace();
     animateFocus({
       fromPositions,
@@ -2947,6 +3156,7 @@ function renderPanelState() {
   els.fitButton.setAttribute("aria-label", "Fit map");
   els.moreButton.setAttribute("aria-label", "More map tools");
   renderMobileCapture();
+  renderStageView();
 }
 
 function openMobileLibrary(options: MobileLibraryOptions = {}) {

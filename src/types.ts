@@ -94,6 +94,7 @@ export type GraphDepthStyle = {
 export type LinkRelation = "parent-of" | "child-of" | "related";
 export type RetargetRelation = LinkRelation | "sibling";
 export type DetailsTabId = "details" | "notes" | "links";
+export type StageViewId = "map" | "outline";
 export type CreateHandleDirection = "top" | "right" | "bottom" | "left";
 export type PositionMap = Map<string, Point>;
 export type SvgAttrs = Record<string, string | number | boolean>;
@@ -192,7 +193,14 @@ export type AppElements = {
   resetButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
   settingsMenuButton: HTMLButtonElement;
+  mapStage: HTMLElement;
   stagePrompt: HTMLElement;
+  mapViewButton: HTMLButtonElement;
+  outlineViewButton: HTMLButtonElement;
+  outlineView: HTMLElement;
+  outlineTitle: HTMLElement;
+  outlineSummary: HTMLElement;
+  outlineTree: HTMLElement;
   settingsPage: HTMLElement;
   settingsCloseButton: HTMLButtonElement;
   mobileManagement: HTMLElement;

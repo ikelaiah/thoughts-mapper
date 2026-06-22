@@ -947,7 +947,7 @@ function renderThoughtList() {
 
       const dot = document.createElement("span");
       dot.className = "thought-dot";
-      dot.style.background = getKindColor(thought.kind);
+      dot.style.background = getKindDisplayColor(thought.kind);
 
       const text = document.createElement("span");
       text.className = "thought-row-text";
@@ -974,10 +974,10 @@ function renderDetails() {
   renderDetailsTabs();
   if (!selected) return;
 
-  const selectedKind = getKindDefinition(selected.kind);
   els.selectedType.textContent = getKindName(selected.kind);
-  els.selectedType.style.background = colorWithAlpha(selectedKind.color, 0.14);
-  els.selectedType.style.color = selectedKind.color;
+  const selectedKindColor = getKindDisplayColor(selected.kind);
+  els.selectedType.style.background = colorWithAlpha(selectedKindColor, isEinkTheme() ? 0.12 : 0.14);
+  els.selectedType.style.color = selectedKindColor;
   els.titleInput.value = selected.title;
   renderKindInspector(selected);
   els.tagInput.value = selected.tags.join(", ");
@@ -1035,7 +1035,7 @@ function renderDetails() {
 
       const dot = document.createElement("span");
       dot.className = "thought-dot";
-      dot.style.background = getKindColor(thought.kind);
+      dot.style.background = getKindDisplayColor(thought.kind);
       const name = document.createElement("span");
       name.className = "thought-name";
       name.textContent = thought.title;
@@ -1221,7 +1221,7 @@ function createOutlineThoughtRow(thought: Thought, depth: number, node = null) {
 
   const dot = document.createElement("span");
   dot.className = "thought-dot";
-  dot.style.background = getKindColor(thought.kind);
+  dot.style.background = getKindDisplayColor(thought.kind);
 
   const copy = document.createElement("span");
   copy.className = "outline-row-copy";
@@ -1741,7 +1741,7 @@ function renderGraph() {
     getGraphRenderNodeBox,
     getLinkDirectionText,
     getKindName,
-    getKindColor,
+    getKindColor: getKindDisplayColor,
     isCalmMode,
     isMobileLayout,
     isInboxThought,
@@ -2569,6 +2569,15 @@ function getKindColor(id) {
   return getKindDefinition(id).color;
 }
 
+function getKindDisplayColor(id) {
+  const color = getKindColor(id);
+  return isEinkTheme() ? getEinkKindColor(color, state.settings.theme) : color;
+}
+
+function isEinkTheme() {
+  return state.settings.background === "eink";
+}
+
 function getDefaultKindId() {
   return state.kinds.some((kind) => kind.id === state.defaultKindId) ? state.defaultKindId : state.kinds[0]?.id || DEFAULT_KIND_ID;
 }
@@ -2714,6 +2723,56 @@ function colorWithAlpha(color, alpha) {
   const g = (value >> 8) & 255;
   const b = value & 255;
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getEinkKindColor(color, theme) {
+  const { h, s, l } = hexToHsl(sanitizeKindColor(color));
+  const dark = theme === "dark";
+  const saturation = clamp(s * (dark ? 0.22 : 0.28) + (dark ? 3 : 4), 0, dark ? 16 : 20);
+  const lightness = dark
+    ? clamp(l * 0.35 + 49, 62, 76)
+    : clamp(l * 0.32 + 28, 41, 55);
+  return hslToHex(h, saturation, lightness);
+}
+
+function hexToHsl(color) {
+  const value = Number.parseInt(color.slice(1), 16);
+  const r = ((value >> 16) & 255) / 255;
+  const g = ((value >> 8) & 255) / 255;
+  const b = (value & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+  if (max === g) h = (b - r) / d + 2;
+  if (max === b) h = (r - g) / d + 4;
+  return { h: h * 60, s: s * 100, l: l * 100 };
+}
+
+function hslToHex(h, s, l) {
+  const normalizedS = s / 100;
+  const normalizedL = l / 100;
+  const c = (1 - Math.abs(2 * normalizedL - 1)) * normalizedS;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = normalizedL - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return `#${toHexPair((r + m) * 255)}${toHexPair((g + m) * 255)}${toHexPair((b + m) * 255)}`;
+}
+
+function toHexPair(value) {
+  return Math.round(clamp(value, 0, 255)).toString(16).padStart(2, "0");
 }
 
 function optionElement(value, text) {
@@ -2964,7 +3023,7 @@ function createThoughtActionItem(thought, label, action, suggestion = false) {
 
   const dot = document.createElement("span");
   dot.className = "thought-dot";
-  dot.style.background = getKindColor(thought.kind);
+  dot.style.background = getKindDisplayColor(thought.kind);
   const name = document.createElement("span");
   name.className = "thought-name";
   name.textContent = thought.title;

@@ -361,7 +361,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
             svg("title", {}, handle.title),
             svg("circle", {
               class: "node-handle-hit",
-              r: 14,
+              r: 22,
             }),
             svg("circle", { class: "node-handle-button", r: 8.5 }),
             svg("line", { class: "node-handle-plus-line", x1: -3.6, y1: 0, x2: 3.6, y2: 0 }),

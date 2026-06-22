@@ -106,6 +106,7 @@ let contextAnchorId: string | null = null;
 let pendingNodeCreatePosition: Point | null = null;
 let contextLinkId: string | null = null;
 let hoverThoughtId: string | null = null;
+let hoverClearTimer: number | undefined;
 let selectedLinkId: string | null = null;
 let undoStack: string[] = [];
 let redoStack: string[] = [];
@@ -3361,12 +3362,25 @@ function updateHoverThought(event) {
     clearHoverThought();
     return;
   }
+  const createHandle = getClosestElement(event.target, ".node-create-handle");
+  if (createHandle?.dataset.id) {
+    setHoverThought(createHandle.dataset.id);
+    return;
+  }
   const node = event.target.closest(".node");
-  setHoverThought(node?.dataset.id || null);
+  if (node?.dataset.id) {
+    setHoverThought(node.dataset.id);
+    return;
+  }
+  scheduleHoverClear();
 }
 
 function setHoverThought(id) {
   const nextId = id || null;
+  if (nextId && hoverClearTimer) {
+    window.clearTimeout(hoverClearTimer);
+    hoverClearTimer = undefined;
+  }
   const previousPreviewId = hoverThoughtId && hoverThoughtId !== getGraphFocusId() ? hoverThoughtId : null;
   const nextPreviewId = nextId && nextId !== getGraphFocusId() ? nextId : null;
   hoverThoughtId = nextId;
@@ -3374,7 +3388,19 @@ function setHoverThought(id) {
   renderGraph();
 }
 
+function scheduleHoverClear() {
+  if (!hoverThoughtId || hoverClearTimer) return;
+  hoverClearTimer = window.setTimeout(() => {
+    hoverClearTimer = undefined;
+    setHoverThought(null);
+  }, 180);
+}
+
 function clearHoverThought() {
+  if (hoverClearTimer) {
+    window.clearTimeout(hoverClearTimer);
+    hoverClearTimer = undefined;
+  }
   setHoverThought(null);
 }
 

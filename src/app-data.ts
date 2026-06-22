@@ -13,18 +13,12 @@ import { clamp, clone, makeId } from "./utils";
 const backgroundIds = [
   "pastel-mint",
   "calm",
-  "pastel-sky",
-  "pastel-blush",
   "fireflies",
   "leaves",
-  "blackhole",
-  "aurora",
-  "rain",
-  "snow",
-  "nebula",
   "starfield",
-  "ocean",
   "eink",
+  "high-contrast",
+  "presentation",
 ];
 
 type UnknownRecord = Record<string, unknown>;

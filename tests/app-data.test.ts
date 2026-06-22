@@ -54,6 +54,33 @@ describe("sanitizeState", () => {
       background: "eink",
     });
   });
+
+  it("removes retired decorative backgrounds from restored maps", () => {
+    const state = sanitizeState({
+      thoughts: [{ id: "a", title: "Alpha" }],
+      settings: {
+        theme: "dark",
+        background: "nebula",
+      },
+    });
+
+    expect(state.settings.background).toBe("calm");
+  });
+
+  it("keeps current public background presets", () => {
+    const state = sanitizeState({
+      thoughts: [{ id: "a", title: "Alpha" }],
+      settings: {
+        theme: "dark",
+        background: "high-contrast",
+      },
+    });
+
+    expect(state.settings).toMatchObject({
+      theme: "dark",
+      background: "high-contrast",
+    });
+  });
 });
 
 describe("sanitizeAppData", () => {

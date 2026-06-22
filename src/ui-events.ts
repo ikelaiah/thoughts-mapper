@@ -41,7 +41,6 @@ export type UiEventHandlers = {
   showNotesTab: () => void;
   showLinksTab: () => void;
   onKindChange: () => void;
-  onKindColorChange: () => void;
   onKindDefaultClick: () => void;
   addKindFromSettings: () => void;
   onNewKindNameKeydown: (event: KeyboardEvent) => void;
@@ -56,6 +55,7 @@ export type UiEventHandlers = {
   onNoteWorkspaceKeydown: (event: KeyboardEvent) => void;
   onNoteWorkspacePaste: (event: ClipboardEvent) => void;
   onLinkSubmit: (event: SubmitEvent) => void;
+  onConnectedThoughtSubmit: (event: SubmitEvent) => void;
   renderRelationshipPreviews: () => void;
   placeInboxThought: () => void;
   closeInboxReview: () => void;
@@ -128,7 +128,6 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.detailsTabLinks.addEventListener("click", handlers.showLinksTab);
   els.titleInput.addEventListener("input", handlers.onTitleInput);
   els.kindInput.addEventListener("change", handlers.onKindChange);
-  els.kindColorInput.addEventListener("change", handlers.onKindColorChange);
   els.kindDefaultButton.addEventListener("click", handlers.onKindDefaultClick);
   els.addKindButton.addEventListener("click", handlers.addKindFromSettings);
   els.newKindNameInput.addEventListener("keydown", handlers.onNewKindNameKeydown);
@@ -143,6 +142,7 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.noteWorkspaceInput.addEventListener("keydown", handlers.onNoteWorkspaceKeydown);
   els.noteWorkspaceInput.addEventListener("paste", handlers.onNoteWorkspacePaste);
   els.linkForm.addEventListener("submit", handlers.onLinkSubmit);
+  els.connectedThoughtForm.addEventListener("submit", handlers.onConnectedThoughtSubmit);
   els.linkTargetInput.addEventListener("input", handlers.renderRelationshipPreviews);
   els.linkTargetInput.addEventListener("change", handlers.renderRelationshipPreviews);
   els.linkRelationInput.addEventListener("change", handlers.renderRelationshipPreviews);

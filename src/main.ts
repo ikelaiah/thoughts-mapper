@@ -203,7 +203,6 @@ const els: AppElements = {
   deleteButton: qs("#deleteButton"),
   titleInput: qs("#titleInput"),
   kindInput: qs("#kindInput"),
-  kindColorInput: qs("#kindColorInput"),
   kindDefaultButton: qs("#kindDefaultButton"),
   tagInput: qs("#tagInput"),
   inboxPlacementPanel: qs("#inboxPlacementPanel"),
@@ -224,6 +223,10 @@ const els: AppElements = {
   linkRelationInput: qs("#linkRelationInput"),
   linkSubmitButton: qs("#linkSubmitButton"),
   linkPreviewText: qs("#linkPreviewText"),
+  connectedThoughtForm: qs("#connectedThoughtForm"),
+  connectedThoughtTitleInput: qs("#connectedThoughtTitleInput"),
+  connectedThoughtRelationInput: qs("#connectedThoughtRelationInput"),
+  connectedThoughtSubmitButton: qs("#connectedThoughtSubmitButton"),
   connectionCount: qs("#connectionCount"),
   connectionList: qs("#connectionList"),
   backlinkCount: qs("#backlinkCount"),
@@ -443,15 +446,6 @@ function bindEvents() {
       render();
       persistState();
     },
-    onKindColorChange: () => {
-      const selected = getSelectedThought();
-      const kind = selected ? getKindDefinition(selected.kind) : null;
-      if (!kind) return;
-      pushHistory();
-      kind.color = sanitizeKindColor(els.kindColorInput.value, kind.color);
-      render();
-      persistState();
-    },
     onKindDefaultClick: () => {
       const selected = getSelectedThought();
       if (!selected || state.defaultKindId === selected.kind) return;
@@ -524,6 +518,15 @@ function bindEvents() {
       const target = resolveLinkTarget(els.linkTargetInput.value);
       addLink(state.selectedId, target?.id || null, els.linkRelationInput.value as LinkRelation);
       if (target) els.linkTargetInput.value = "";
+    },
+    onConnectedThoughtSubmit: (event) => {
+      event.preventDefault();
+      const selected = getSelectedThought();
+      const title = els.connectedThoughtTitleInput.value.trim();
+      if (!selected || !title) return;
+      els.connectedThoughtTitleInput.value = "";
+      addThought(title, selected.id, els.connectedThoughtRelationInput.value as LinkRelation);
+      setStatus("Connected thought created");
     },
     renderRelationshipPreviews,
     placeInboxThought,
@@ -770,7 +773,14 @@ function applySettings() {
 
 function getColourSchemeId(theme, background) {
   const match = Object.entries(colourSchemes).find(([, scheme]) => scheme.theme === theme && scheme.background === background);
-  return match ? match[0] : "light-mint";
+  if (match) return match[0];
+  if (background === "eink") return "light-eink";
+  if (background === "leaves") return "light-leaves";
+  if (background === "fireflies") return "dark-fire";
+  if (background === "starfield") return "dark-starfield";
+  if (background === "high-contrast") return "high-contrast";
+  if (background === "presentation") return "presentation";
+  return theme === "dark" ? "dark-calm" : "light-mint";
 }
 
 function renderProjectControls() {
@@ -1015,6 +1025,7 @@ function renderDetails() {
   els.linkTargetInput.disabled = !candidates.length;
   els.linkRelationInput.disabled = !candidates.length;
   els.linkSubmitButton.disabled = !candidates.length;
+  els.connectedThoughtSubmitButton.disabled = !selected;
   els.placeTargetInput.disabled = !candidates.length;
   els.placeRelationInput.disabled = !candidates.length;
   els.placeThoughtButton.disabled = !candidates.length;
@@ -1051,7 +1062,15 @@ function renderDetails() {
       unlinkButton.title = `Remove the connection between ${selected.title} and ${thought.title}`;
       unlinkButton.addEventListener("click", () => removeConnection(linkId));
 
-      item.append(openButton, unlinkButton);
+      const editButton = document.createElement("button");
+      editButton.className = "connection-action connection-edit";
+      editButton.type = "button";
+      editButton.textContent = "Edit";
+      editButton.title = `Edit the connection between ${selected.title} and ${thought.title}`;
+      editButton.addEventListener("click", () => openLinkContextMenuFromElement(linkId, editButton));
+
+      unlinkButton.classList.add("connection-action");
+      item.append(openButton, editButton, unlinkButton);
       return item;
     }),
   );
@@ -1655,8 +1674,6 @@ function renderKindInspector(selected) {
   divider.disabled = true;
   els.kindInput.replaceChildren(...options, divider, optionElement(NEW_KIND_VALUE, "+ New type"));
   els.kindInput.value = selected.kind;
-  const kind = getKindDefinition(selected.kind);
-  els.kindColorInput.value = kind.color;
   const isDefault = state.defaultKindId === selected.kind;
   els.kindDefaultButton.classList.toggle("active", isDefault);
   els.kindDefaultButton.disabled = isDefault;
@@ -2590,7 +2607,7 @@ function createKindFromPrompt(options: CreateKindOptions = {}) {
     return null;
   }
   const kindCount = state.kinds.length;
-  const kind = addKind(name, els.kindColorInput?.value || getNextKindColor(), { select: false });
+  const kind = addKind(name, getNextKindColor(), { select: false });
   if (!kind) return null;
   if (options.assignToThoughtId) {
     const thought = getThought(options.assignToThoughtId);
@@ -3534,6 +3551,11 @@ function openLinkContextMenu(linkId, clientX, clientY) {
   renderLinkEditForm(link);
   positionContextMenu(clientX, clientY);
   requestAnimationFrame(() => els.linkNameInput.focus());
+}
+
+function openLinkContextMenuFromElement(linkId, element: HTMLElement) {
+  const bounds = element.getBoundingClientRect();
+  openLinkContextMenu(linkId, bounds.right, bounds.bottom + 6);
 }
 
 function positionContextMenu(clientX, clientY) {

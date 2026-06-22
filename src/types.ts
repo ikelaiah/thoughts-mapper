@@ -231,7 +231,6 @@ export type AppElements = {
   deleteButton: HTMLButtonElement;
   titleInput: HTMLInputElement;
   kindInput: HTMLSelectElement;
-  kindColorInput: HTMLInputElement;
   kindDefaultButton: HTMLButtonElement;
   tagInput: HTMLInputElement;
   inboxPlacementPanel: HTMLElement;
@@ -252,6 +251,10 @@ export type AppElements = {
   linkRelationInput: HTMLSelectElement;
   linkSubmitButton: HTMLButtonElement;
   linkPreviewText: HTMLElement;
+  connectedThoughtForm: HTMLFormElement;
+  connectedThoughtTitleInput: HTMLInputElement;
+  connectedThoughtRelationInput: HTMLSelectElement;
+  connectedThoughtSubmitButton: HTMLButtonElement;
   connectionCount: HTMLElement;
   connectionList: HTMLElement;
   backlinkCount: HTMLElement;

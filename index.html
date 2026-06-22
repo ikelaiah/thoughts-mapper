@@ -165,7 +165,6 @@
                 <span>Type</span>
                 <div class="kind-control">
                   <select id="kindInput"></select>
-                  <input id="kindColorInput" type="color" title="Type colour" aria-label="Type colour" />
                   <button id="kindDefaultButton" type="button" title="Use this kind by default">Default</button>
                 </div>
               </label>
@@ -232,6 +231,21 @@
                 <button id="linkSubmitButton" type="submit">Connect</button>
               </div>
               <p id="linkPreviewText" class="relationship-preview">Search for a thought to connect.</p>
+            </form>
+
+            <form id="connectedThoughtForm" class="link-form connected-thought-form">
+              <label class="field link-search-field">
+                <span>Create connected thought</span>
+                <input id="connectedThoughtTitleInput" type="text" maxlength="80" placeholder="New thought title" autocomplete="off" />
+              </label>
+              <div class="link-inline-row">
+                <select id="connectedThoughtRelationInput" aria-label="New thought connection">
+                  <option value="parent-of">Add below</option>
+                  <option value="child-of">Place above</option>
+                  <option value="related">Connect beside</option>
+                </select>
+                <button id="connectedThoughtSubmitButton" type="submit">Create</button>
+              </div>
             </form>
 
             <div class="section-heading">
@@ -402,28 +416,14 @@
           <label class="field">
             <span>Colour scheme</span>
             <select id="colourSchemeInput" aria-label="Colour scheme">
-              <option value="light-mint">Light mint</option>
-              <option value="light-sky">Light sky</option>
-              <option value="light-blush">Light blush</option>
-              <option value="light-leaves">Light leaves</option>
-              <option value="light-rain">Light rain</option>
-              <option value="light-snow">Light snow</option>
-              <option value="light-ocean">Light ocean</option>
-              <option value="light-eink">E-ink light</option>
-              <option value="dark-calm">Dark calm</option>
-              <option value="dark-mint">Dark mint</option>
-              <option value="dark-sky">Dark sky</option>
-              <option value="dark-blush">Dark blush</option>
-              <option value="dark-fire">Dark fire</option>
-              <option value="dark-leaves">Dark leaves</option>
-              <option value="dark-blackhole">Dark black hole</option>
-              <option value="dark-aurora">Dark aurora</option>
-              <option value="dark-rain">Dark rain</option>
-              <option value="dark-snow">Dark snow</option>
-              <option value="dark-nebula">Dark nebula</option>
-              <option value="dark-starfield">Dark starfield</option>
-              <option value="dark-ocean">Dark ocean</option>
-              <option value="dark-eink">E-ink dark</option>
+              <option value="light-mint">Light</option>
+              <option value="dark-calm">Dark</option>
+              <option value="light-eink">E-ink</option>
+              <option value="high-contrast">High contrast</option>
+              <option value="presentation">Presentation</option>
+              <option value="light-leaves">Falling leaves</option>
+              <option value="dark-starfield">Starfield</option>
+              <option value="dark-fire">Fire</option>
             </select>
           </label>
 

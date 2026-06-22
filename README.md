@@ -75,7 +75,7 @@ The visual graph keeps the selected thought central. Thoughts that frame it sit 
 - Pan, zoom, fit, center, and reset the graph view
 - Collapse the left library when you want more space
 - Switch between multiple projects
-- Start from templates for research, meetings, Bible study, sermons, project tracking, personal CRM, learning, book summaries, software architecture, and helpdesk knowledge bases
+- Start from focused templates for project tracking, meetings, personal CRM, learning, software architecture, and helpdesk knowledge bases
 
 ## 🎨 Calm Visual Controls
 

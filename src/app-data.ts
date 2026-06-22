@@ -7,7 +7,20 @@ import {
   seedState,
 } from "./constants";
 import { normalizeKindName, normalizeTags, sanitizeKindColor, sanitizeKindId } from "./normalizers";
-import type { AppData, KindDefinition, Link, LinkType, MapSettings, Project, ProjectState, Thought, ViewState } from "./types";
+import type {
+  AppData,
+  KindDefinition,
+  Link,
+  LinkType,
+  MapSettings,
+  Project,
+  ProjectSnapshot,
+  ProjectState,
+  Thought,
+  ThoughtAttachment,
+  ThoughtAttachmentKind,
+  ViewState,
+} from "./types";
 import { clamp, clone, makeId } from "./utils";
 
 const backgroundIds = [
@@ -61,6 +74,7 @@ export function sanitizeAppData(raw: unknown): AppData {
         name: "My first map",
         updatedAt: new Date().toISOString(),
         state: sanitizeState(raw || seedState),
+        snapshots: [],
       },
     ],
   };
@@ -69,11 +83,13 @@ export function sanitizeAppData(raw: unknown): AppData {
 export function sanitizeProject(project: unknown, index = 0): Project | null {
   const source = asRecord(project);
   if (!source) return null;
+  const state = sanitizeState(source.state || seedState);
   return {
     id: String(source.id || makeId("project")),
     name: String(source.name || `Project ${index + 1}`).slice(0, 80),
     updatedAt: stringOrEmpty(source.updatedAt) || new Date().toISOString(),
-    state: sanitizeState(source.state || seedState),
+    state,
+    snapshots: sanitizeSnapshots(source.snapshots),
   };
 }
 
@@ -83,7 +99,25 @@ export function createProject(name: unknown, projectState: unknown = seedState):
     name: String(name || "Untitled project").slice(0, 80),
     updatedAt: new Date().toISOString(),
     state: sanitizeState(projectState || seedState),
+    snapshots: [],
   };
+}
+
+export function sanitizeSnapshots(value: unknown): ProjectSnapshot[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((snapshot): ProjectSnapshot | null => {
+      const source = asRecord(snapshot);
+      if (!source) return null;
+      return {
+        id: stringOrEmpty(source.id) || makeId("snapshot"),
+        name: String(source.name || "Untitled snapshot").slice(0, 80),
+        createdAt: stringOrEmpty(source.createdAt) || new Date().toISOString(),
+        state: sanitizeState(source.state || seedState),
+      };
+    })
+    .filter((snapshot): snapshot is ProjectSnapshot => Boolean(snapshot))
+    .slice(0, 30);
 }
 
 export function sanitizeKindDefinitions(kinds: unknown, thoughts: unknown[] = []): KindDefinition[] {
@@ -156,6 +190,7 @@ export function sanitizeState(nextState: unknown): ProjectState {
     scale: finiteNumber(sourceView?.scale) ? sourceView.scale : 1,
   };
 
+  const now = new Date().toISOString();
   const thoughts: Thought[] = sourceThoughts.map((value, index) => {
     const thought = asRecord(value) || {};
     const kind = stringOrEmpty(thought.kind);
@@ -165,6 +200,8 @@ export function sanitizeState(nextState: unknown): ProjectState {
       kind: kinds.some((item) => item.id === kind) ? kind : defaultKindId,
       note: String(thought.note || ""),
       tags: normalizeTags(thought.tags),
+      attachments: sanitizeAttachments(thought.attachments),
+      updatedAt: stringOrEmpty(thought.updatedAt) || now,
       x: finiteNumber(thought.x) ? thought.x : index * 120,
       y: finiteNumber(thought.y) ? thought.y : index * 80,
     };
@@ -200,4 +237,26 @@ export function sanitizeState(nextState: unknown): ProjectState {
     view,
     settings,
   };
+}
+
+export function sanitizeAttachments(value: unknown): ThoughtAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((attachment): ThoughtAttachment | null => {
+      const source = asRecord(attachment);
+      if (!source) return null;
+      const ref = String(source.ref || source.url || source.path || "").trim().slice(0, 2048);
+      if (!ref) return null;
+      const kind: ThoughtAttachmentKind = source.kind === "file" ? "file" : "url";
+      const fallbackTitle = kind === "file" ? "File reference" : "Source link";
+      return {
+        id: stringOrEmpty(source.id) || makeId("source"),
+        kind,
+        title: String(source.title || fallbackTitle).trim().slice(0, 100) || fallbackTitle,
+        ref,
+        preview: String(source.preview || "").trim().slice(0, 180),
+      };
+    })
+    .filter((attachment): attachment is ThoughtAttachment => Boolean(attachment))
+    .slice(0, 24);
 }

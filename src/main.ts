@@ -8,6 +8,17 @@ import {
 } from "./graph-layout";
 import { createProject, sanitizeAppData, sanitizeState } from "./app-data";
 import { renderGraphView } from "./graph-render";
+import {
+  jsonCanvasToState,
+  markdownFilesToState,
+  opmlDocumentToState,
+  projectToJsonCanvas,
+  projectToMarkdownBundle,
+  projectToMarkdownFiles,
+  projectToOpml,
+  slugifyFilename,
+  type TextFile,
+} from "./interoperability";
 import { renderMarkdown } from "./markdown";
 import { normalizeKindName, normalizeTags, sanitizeKindColor, sanitizeKindId } from "./normalizers";
 import {
@@ -52,12 +63,14 @@ import type {
   PointerStart,
   Point,
   PositionMap,
+  ProjectSnapshot,
   ProjectState,
   RetargetRelation,
   SelectThoughtOptions,
   StageViewId,
   SvgAttrs,
   Thought,
+  ThoughtAttachment,
   ThoughtRenderEffect,
   ViewState,
 } from "./types";
@@ -69,6 +82,22 @@ let saveTimer: number | undefined;
 let statusTimer: number | undefined;
 let graphRect = { width: 1, height: 1 };
 type PanelSide = "left" | "right";
+type ReviewModeId = "unplaced" | "orphaned" | "missing-mentions" | "open-questions" | "stale-notes" | "unchecked-tasks";
+type ReviewItem = {
+  id: string;
+  thought: Thought;
+  title: string;
+  note: string;
+  mode: ReviewModeId;
+  missingTitle?: string;
+};
+type CommandPaletteMode = "root" | "create" | "connect" | "jump" | "tag" | "export";
+type CommandPaletteItem = {
+  id: string;
+  title: string;
+  meta: string;
+  action: () => void;
+};
 type CalmDepthLayoutOptions = {
   verticalGap: number;
   sideGap: number;
@@ -117,9 +146,14 @@ let newProjectPanelOpen = false;
 let moreMenuOpen = false;
 let inboxReviewOpen = false;
 let inboxReviewIndex = 0;
+let reviewMode: ReviewModeId = "unplaced";
 let noteWorkspaceOpen = false;
 let activeDetailsTab: DetailsTabId = "details";
 let stageView: StageViewId = "map";
+let commandPaletteOpen = false;
+let commandPaletteMode: CommandPaletteMode = "root";
+let commandPaletteActiveIndex = 0;
+let snapshotPanelOpen = false;
 const mobileLayoutQuery = window.matchMedia("(max-width: 720px)");
 let mobileLibraryOpen = false;
 let mobileDetailsOpen = false;
@@ -147,13 +181,23 @@ const els: AppElements = {
   quickCaptureInput: qs("#quickCaptureInput"),
   tagFilterInput: qs("#tagFilterInput"),
   inboxFilterButton: qs("#inboxFilterButton"),
+  reviewButton: qs("#reviewButton"),
   inboxCount: qs("#inboxCount"),
   thoughtCount: qs("#thoughtCount"),
   thoughtList: qs("#thoughtList"),
   sidebarActions: qs(".sidebar-actions"),
   exportButton: qs("#exportButton"),
   markdownExportButton: qs("#markdownExportButton"),
+  markdownFolderExportButton: qs("#markdownFolderExportButton"),
+  opmlExportButton: qs("#opmlExportButton"),
+  jsonCanvasExportButton: qs("#jsonCanvasExportButton"),
+  svgExportButton: qs("#svgExportButton"),
+  pngExportButton: qs("#pngExportButton"),
+  snapshotButton: qs("#snapshotButton"),
   importInput: qs("#importInput"),
+  markdownImportInput: qs("#markdownImportInput"),
+  opmlImportInput: qs("#opmlImportInput"),
+  jsonCanvasImportInput: qs("#jsonCanvasImportInput"),
   sidebarToggleButton: qs("#sidebarToggleButton"),
   detailsToggleButton: qs("#detailsToggleButton"),
   moreButton: qs("#moreButton"),
@@ -169,10 +213,20 @@ const els: AppElements = {
   stagePrompt: qs("#stagePrompt"),
   mapViewButton: qs("#mapViewButton"),
   outlineViewButton: qs("#outlineViewButton"),
+  walkViewButton: qs("#walkViewButton"),
   outlineView: qs("#outlineView"),
   outlineTitle: qs("#outlineTitle"),
   outlineSummary: qs("#outlineSummary"),
   outlineTree: qs("#outlineTree"),
+  walkView: qs("#walkView"),
+  walkTitle: qs("#walkTitle"),
+  walkMeta: qs("#walkMeta"),
+  walkNote: qs("#walkNote"),
+  walkContext: qs("#walkContext"),
+  walkProgress: qs("#walkProgress"),
+  walkPrevButton: qs("#walkPrevButton"),
+  walkNextButton: qs("#walkNextButton"),
+  walkMapButton: qs("#walkMapButton"),
   settingsPage: qs("#settingsPage"),
   settingsCloseButton: qs("#settingsCloseButton"),
   mobileManagement: qs("#mobileManagement"),
@@ -196,9 +250,11 @@ const els: AppElements = {
   detailsTabDetails: qs("#detailsTabDetails"),
   detailsTabNotes: qs("#detailsTabNotes"),
   detailsTabLinks: qs("#detailsTabLinks"),
+  detailsTabSources: qs("#detailsTabSources"),
   detailsTabPanelDetails: qs("#detailsTabPanelDetails"),
   detailsTabPanelNotes: qs("#detailsTabPanelNotes"),
   detailsTabPanelLinks: qs("#detailsTabPanelLinks"),
+  detailsTabPanelSources: qs("#detailsTabPanelSources"),
   selectedType: qs("#selectedType"),
   deleteButton: qs("#deleteButton"),
   titleInput: qs("#titleInput"),
@@ -233,7 +289,13 @@ const els: AppElements = {
   backlinkList: qs("#backlinkList"),
   mentionCount: qs("#mentionCount"),
   mentionList: qs("#mentionList"),
+  attachmentForm: qs("#attachmentForm"),
+  attachmentKindInput: qs("#attachmentKindInput"),
+  attachmentTitleInput: qs("#attachmentTitleInput"),
+  attachmentRefInput: qs("#attachmentRefInput"),
+  attachmentList: qs("#attachmentList"),
   inboxReviewPanel: qs("#inboxReviewPanel"),
+  reviewModeInput: qs("#reviewModeInput"),
   inboxReviewProgress: qs("#inboxReviewProgress"),
   inboxReviewCloseButton: qs("#inboxReviewCloseButton"),
   inboxReviewPrevButton: qs("#inboxReviewPrevButton"),
@@ -246,6 +308,18 @@ const els: AppElements = {
   inboxReviewParentButton: qs("#inboxReviewParentButton"),
   inboxReviewRelatedButton: qs("#inboxReviewRelatedButton"),
   inboxReviewKeepButton: qs("#inboxReviewKeepButton"),
+  reviewOpenNoteButton: qs("#reviewOpenNoteButton"),
+  reviewFixButton: qs("#reviewFixButton"),
+  commandPalette: qs("#commandPalette"),
+  commandPaletteInput: qs("#commandPaletteInput"),
+  commandPaletteList: qs("#commandPaletteList"),
+  commandPaletteHint: qs("#commandPaletteHint"),
+  commandPaletteCloseButton: qs("#commandPaletteCloseButton"),
+  snapshotPanel: qs("#snapshotPanel"),
+  snapshotNameInput: qs("#snapshotNameInput"),
+  createSnapshotButton: qs("#createSnapshotButton"),
+  snapshotList: qs("#snapshotList"),
+  snapshotCloseButton: qs("#snapshotCloseButton"),
   contextMenu: qs("#contextMenu"),
   nodeCreateForm: qs("#nodeCreateForm"),
   nodeCreateInput: qs("#nodeCreateInput"),
@@ -358,15 +432,25 @@ function bindEvents() {
     handleInboxFilterClick: () => {
       const inboxThoughts = getInboxThoughts();
       if (inboxThoughts.length) {
-        openInboxReview();
+        openInboxReview("unplaced");
         return;
       }
       showInboxOnly = !showInboxOnly;
       renderThoughtList();
     },
+    openReview: () => openInboxReview(getFirstPopulatedReviewMode()),
     exportMap,
     exportMarkdown,
+    exportMarkdownFolder,
+    exportOpml,
+    exportJsonCanvas,
+    exportSvg,
+    exportPng,
+    openSnapshotPanel,
     importMap,
+    importMarkdown,
+    importOpml,
+    importJsonCanvas,
     toggleSidebar,
     toggleDetailsPanel,
     toggleMoreMenu,
@@ -423,14 +507,20 @@ function bindEvents() {
     },
     showMapView: () => setStageView("map"),
     showOutlineView: () => setStageView("outline"),
+    showWalkView: () => setStageView("walk"),
+    previousWalkThought,
+    nextWalkThought,
+    showWalkThoughtOnMap,
     showDetailsTab: () => setDetailsTab("details"),
     showNotesTab: () => setDetailsTab("notes"),
     showLinksTab: () => setDetailsTab("links"),
+    showSourcesTab: () => setDetailsTab("sources"),
     onTitleInput: () => {
       const selected = getSelectedThought();
       if (!selected) return;
       pushHistory();
       selected.title = els.titleInput.value;
+      touchThought(selected);
       render();
       persistState();
     },
@@ -443,6 +533,7 @@ function bindEvents() {
       }
       pushHistory();
       selected.kind = els.kindInput.value;
+      touchThought(selected);
       render();
       persistState();
     },
@@ -465,6 +556,7 @@ function bindEvents() {
       if (!selected) return;
       pushHistory();
       selected.tags = normalizeTags(els.tagInput.value);
+      touchThought(selected);
       render();
       persistState();
     },
@@ -528,7 +620,9 @@ function bindEvents() {
       addThought(title, selected.id, els.connectedThoughtRelationInput.value as LinkRelation);
       setStatus("Connected thought created");
     },
+    onAttachmentSubmit,
     renderRelationshipPreviews,
+    onReviewModeChange,
     placeInboxThought,
     closeInboxReview,
     previousInboxReviewThought,
@@ -537,6 +631,16 @@ function bindEvents() {
     placeInboxReviewAsParent: () => placeInboxReviewThought("parent-of"),
     placeInboxReviewRelated: () => placeInboxReviewThought("related"),
     keepInboxReviewThought,
+    openReviewNote,
+    fixCurrentReviewItem,
+    closeCommandPalette,
+    onCommandPaletteInput: () => {
+      commandPaletteActiveIndex = 0;
+      renderCommandPalette();
+    },
+    onCommandPaletteKeydown,
+    createSnapshot,
+    closeSnapshotPanel,
     deleteSelectedThought,
     onPointerDown,
     onPointerMove,
@@ -554,6 +658,11 @@ function bindEvents() {
     onDocumentPointerUp,
     onDocumentPointerDown,
     onKeyDown: (event) => {
+      if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "p" || event.key === "/")) {
+        event.preventDefault();
+        openCommandPalette();
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         focusQuickCapture();
@@ -579,6 +688,8 @@ function bindEvents() {
         return;
       }
       if (event.key === "Escape") {
+        closeCommandPalette();
+        closeSnapshotPanel();
         closeNoteWorkspace();
         closeContextMenu();
         closeSettings();
@@ -754,9 +865,12 @@ function render() {
   renderDetails();
   renderStageView();
   renderOutline();
+  renderWalk();
   renderNoteWorkspace();
   renderKindSettings();
   renderInboxReview();
+  renderCommandPalette();
+  renderSnapshotPanel();
   renderGraph();
 }
 
@@ -886,6 +1000,8 @@ function createTemplateState(template) {
       kind: "project",
       note: `Starter map for ${template.name}.`,
       tags: normalizeTags(template.tags || []),
+      attachments: [],
+      updatedAt: new Date().toISOString(),
       x: 0,
       y: 0,
     },
@@ -902,6 +1018,8 @@ function createTemplateState(template) {
       kind,
       note,
       tags: normalizeTags(template.tags || []),
+      attachments: [],
+      updatedAt: new Date().toISOString(),
       x: startX + index * spacing,
       y: 235,
     });
@@ -937,6 +1055,7 @@ function renderThoughtList() {
   const tagFilter = els.tagFilterInput.value;
   els.inboxCount.textContent = String(inboxThoughts.length);
   els.inboxFilterButton.classList.toggle("active", showInboxOnly);
+  els.reviewButton.classList.toggle("active", inboxReviewOpen);
   const thoughts = state.thoughts
     .filter((thought) => {
       const haystack = `${thought.title} ${getKindName(thought.kind)} ${thought.note} ${thought.tags.join(" ")}`.toLowerCase();
@@ -1075,6 +1194,7 @@ function renderDetails() {
     }),
   );
   renderMentionPanels(selected);
+  renderAttachmentPanel(selected);
 }
 
 function setStageView(view: StageViewId) {
@@ -1085,6 +1205,10 @@ function setStageView(view: StageViewId) {
     renderOutline();
     return;
   }
+  if (view === "walk") {
+    renderWalk();
+    return;
+  }
   requestAnimationFrame(() => {
     measureGraph();
     renderGraph();
@@ -1093,17 +1217,23 @@ function setStageView(view: StageViewId) {
 
 function renderStageView() {
   const outlineActive = stageView === "outline";
+  const walkActive = stageView === "walk";
+  const nonMapActive = outlineActive || walkActive;
   els.mapStage.classList.toggle("outline-mode", outlineActive);
+  els.mapStage.classList.toggle("walk-mode", walkActive);
   els.outlineView.hidden = !outlineActive;
-  els.mapViewButton.classList.toggle("active", !outlineActive);
+  els.walkView.hidden = !walkActive;
+  els.mapViewButton.classList.toggle("active", !nonMapActive);
   els.outlineViewButton.classList.toggle("active", outlineActive);
-  els.mapViewButton.setAttribute("aria-selected", String(!outlineActive));
+  els.walkViewButton.classList.toggle("active", walkActive);
+  els.mapViewButton.setAttribute("aria-selected", String(!nonMapActive));
   els.outlineViewButton.setAttribute("aria-selected", String(outlineActive));
-  els.graph.setAttribute("aria-hidden", String(outlineActive));
-  els.fitButton.disabled = outlineActive;
-  els.fitButton.title = outlineActive ? "Switch to map view to fit the map" : "Fit map";
+  els.walkViewButton.setAttribute("aria-selected", String(walkActive));
+  els.graph.setAttribute("aria-hidden", String(nonMapActive));
+  els.fitButton.disabled = nonMapActive;
+  els.fitButton.title = nonMapActive ? "Switch to map view to fit the map" : "Fit map";
   els.fitButton.setAttribute("aria-label", els.fitButton.title);
-  els.stagePrompt.hidden = outlineActive || Boolean(getSelectedThought());
+  els.stagePrompt.hidden = nonMapActive || Boolean(getSelectedThought());
 }
 
 function renderOutline() {
@@ -1279,6 +1409,113 @@ function outlineEmptyState(message: string) {
   return empty;
 }
 
+function renderWalk() {
+  if (stageView !== "walk") return;
+  const path = getWalkPath();
+  const selected = state.selectedId ? getThought(state.selectedId) : null;
+  const active = selected && path.some((thought) => thought.id === selected.id)
+    ? selected
+    : path[0] || null;
+  if (active && active.id !== state.selectedId) {
+    state.selectedId = active.id;
+    renderThoughtList();
+    renderDetails();
+    persistState();
+  }
+  const activeIndex = active ? path.findIndex((thought) => thought.id === active.id) : -1;
+  els.walkTitle.textContent = active?.title || "No thoughts yet";
+  els.walkProgress.textContent = active ? `${activeIndex + 1} of ${path.length}` : "0 of 0";
+  els.walkMeta.textContent = active
+    ? [getKindName(active.kind), active.tags.map((tag) => `#${tag}`).join(" "), getConnections(active.id).length ? `${getConnections(active.id).length} connected` : ""]
+      .filter(Boolean)
+      .join(" · ")
+    : "";
+  els.walkNote.innerHTML = active?.note?.trim()
+    ? renderMarkdown(active.note, getThoughtByTitle)
+    : '<p class="note-empty">No note yet.</p>';
+  els.walkContext.replaceChildren(...(active ? createWalkContextButtons(active) : []));
+  els.walkPrevButton.disabled = activeIndex <= 0;
+  els.walkNextButton.disabled = activeIndex < 0 || activeIndex >= path.length - 1;
+  els.walkMapButton.disabled = !active;
+}
+
+function getWalkPath(): Thought[] {
+  const graphThoughts = getGraphThoughts();
+  if (!graphThoughts.length) return getInboxThoughts().slice().sort(compareThoughtsByTitle);
+  const selected = state.selectedId ? getThought(state.selectedId) : null;
+  const start = selected && !isInboxThought(selected.id)
+    ? selected
+    : getOutlineRoots(graphThoughts.slice().sort(compareThoughtsByTitle))[0] || graphThoughts[0];
+  const path: Thought[] = [];
+  const visited = new Set<string>();
+  const walk = (thought: Thought) => {
+    if (!thought || visited.has(thought.id)) return;
+    visited.add(thought.id);
+    path.push(thought);
+    getChildThoughts(thought.id)
+      .slice()
+      .sort(compareThoughtsByTitle)
+      .forEach(walk);
+  };
+  walk(start);
+  graphThoughts
+    .slice()
+    .sort(compareThoughtsByTitle)
+    .forEach(walk);
+  return path;
+}
+
+function createWalkContextButtons(active: Thought): HTMLElement[] {
+  const groups = [
+    ["Above", getParentThoughts(active.id)],
+    ["Below", getChildThoughts(active.id)],
+    ["Beside", getRelatedThoughts(active.id)],
+  ] as [string, Thought[]][];
+  return groups.flatMap(([label, thoughts]) => thoughts.slice().sort(compareThoughtsByTitle).map((thought) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "walk-context-item";
+    button.addEventListener("click", () => {
+      selectThought(thought.id, { center: false });
+      renderWalk();
+    });
+    const dot = document.createElement("span");
+    dot.className = "thought-dot";
+    dot.style.background = getKindDisplayColor(thought.kind);
+    const title = document.createElement("span");
+    title.textContent = thought.title;
+    const badge = document.createElement("span");
+    badge.className = "relation-badge";
+    badge.textContent = label;
+    button.append(dot, title, badge);
+    return button;
+  }));
+}
+
+function previousWalkThought() {
+  moveWalkThought(-1);
+}
+
+function nextWalkThought() {
+  moveWalkThought(1);
+}
+
+function moveWalkThought(direction: number) {
+  const path = getWalkPath();
+  if (!path.length) return;
+  const index = Math.max(0, path.findIndex((thought) => thought.id === state.selectedId));
+  const next = path[clamp(index + direction, 0, path.length - 1)];
+  if (!next) return;
+  selectThought(next.id, { center: false });
+  renderWalk();
+}
+
+function showWalkThoughtOnMap() {
+  if (!state.selectedId) return;
+  setStageView("map");
+  centerSelected();
+}
+
 function spanText(text: string) {
   const span = document.createElement("span");
   span.textContent = text;
@@ -1299,6 +1536,7 @@ function renderDetailsTabs() {
     { id: "details", button: els.detailsTabDetails, panel: els.detailsTabPanelDetails },
     { id: "notes", button: els.detailsTabNotes, panel: els.detailsTabPanelNotes },
     { id: "links", button: els.detailsTabLinks, panel: els.detailsTabPanelLinks },
+    { id: "sources", button: els.detailsTabSources, panel: els.detailsTabPanelSources },
   ];
   tabs.forEach(({ id, button, panel }) => {
     const active = id === activeDetailsTab;
@@ -1314,6 +1552,7 @@ function updateSelectedNote(value: string, source: "compact" | "workspace", care
   if (!selected) return;
   pushHistory();
   selected.note = value;
+  touchThought(selected);
   if (source !== "compact") {
     els.noteInput.value = value;
     showNotePreview(value);
@@ -1327,6 +1566,10 @@ function updateSelectedNote(value: string, source: "compact" | "workspace", care
   renderThoughtList();
   renderMentionPanels(selected);
   persistState();
+}
+
+function touchThought(thought: Thought) {
+  thought.updatedAt = new Date().toISOString();
 }
 
 function openNoteWorkspace() {
@@ -1796,6 +2039,8 @@ function addThought(title: string, anchorId = state.selectedId, relation: LinkRe
     kind: getDefaultKindId(),
     note: "",
     tags: [],
+    attachments: [],
+    updatedAt: new Date().toISOString(),
     x: options.position?.x ?? defaultX,
     y: options.position?.y ?? defaultY,
   };
@@ -2614,6 +2859,7 @@ function createKindFromPrompt(options: CreateKindOptions = {}) {
     if (thought && thought.kind !== kind.id) {
       if (state.kinds.length === kindCount) pushHistory();
       thought.kind = kind.id;
+      touchThought(thought);
     }
   }
   render();
@@ -2659,6 +2905,7 @@ function renameKind(id, name) {
   }
   pushHistory();
   kind.name = normalizedName;
+  state.thoughts.filter((thought) => thought.kind === id).forEach(touchThought);
   render();
   persistState();
 }
@@ -2669,6 +2916,7 @@ function updateKindColor(id, color) {
   if (!kind || kind.color === nextColor) return;
   pushHistory();
   kind.color = nextColor;
+  state.thoughts.filter((thought) => thought.kind === id).forEach(touchThought);
   render();
   persistState();
 }
@@ -2708,7 +2956,10 @@ function deleteKind(id) {
   state.kinds = state.kinds.filter((item) => item.id !== id);
   state.defaultKindId = state.defaultKindId === id ? fallback.id : state.defaultKindId;
   state.thoughts.forEach((thought) => {
-    if (thought.kind === id) thought.kind = fallback.id;
+    if (thought.kind === id) {
+      thought.kind = fallback.id;
+      touchThought(thought);
+    }
   });
   render();
   persistState();
@@ -2843,7 +3094,8 @@ function renderPlacePreview() {
 }
 
 function renderInboxReviewPreview() {
-  const current = getCurrentInboxReviewThought();
+  const item = getCurrentReviewItem();
+  const current = item?.thought || null;
   const target = getThought(els.inboxReviewTargetInput.value);
   const targetName = target ? trimLabel(target.title, 22) : "selected thought";
   els.inboxReviewChildButton.textContent = `Place below ${targetName}`;
@@ -2854,7 +3106,7 @@ function renderInboxReviewPreview() {
   els.inboxReviewRelatedButton.title = current && target ? describeActiveRelation(current, target, "related") : "";
   els.inboxReviewPreview.textContent = current && target
     ? `${current.title} will be placed with ${target.title}.`
-    : "Choose a thought to connect.";
+    : item?.note || "Choose a thought to connect.";
 }
 
 function setRelationOptionText(select: HTMLSelectElement, labels: Partial<Record<LinkRelation, string>>) {
@@ -2876,50 +3128,196 @@ function describeActiveRelation(active: Thought, target: Thought, relation: Link
   return `${active.title} will sit above ${target.title}.`;
 }
 
-function openInboxReview() {
+function openInboxReview(mode: ReviewModeId = reviewMode) {
   inboxReviewOpen = true;
-  inboxReviewIndex = clamp(inboxReviewIndex, 0, Math.max(getInboxThoughts().length - 1, 0));
+  reviewMode = mode;
+  inboxReviewIndex = clamp(inboxReviewIndex, 0, Math.max(getReviewItems().length - 1, 0));
   renderInboxReview();
+  renderThoughtList();
 }
 
 function closeInboxReview() {
   if (!inboxReviewOpen) return;
   inboxReviewOpen = false;
   renderInboxReview();
+  renderThoughtList();
+}
+
+function getCurrentReviewItem(): ReviewItem | null {
+  const items = getReviewItems();
+  if (!items.length) return null;
+  inboxReviewIndex = clamp(inboxReviewIndex, 0, items.length - 1);
+  return items[inboxReviewIndex];
 }
 
 function getCurrentInboxReviewThought() {
-  const inboxThoughts = getInboxThoughts();
-  if (!inboxThoughts.length) return null;
-  inboxReviewIndex = clamp(inboxReviewIndex, 0, inboxThoughts.length - 1);
-  return inboxThoughts[inboxReviewIndex];
+  return getCurrentReviewItem()?.thought || null;
 }
 
 function renderInboxReview() {
   els.inboxReviewPanel.hidden = !inboxReviewOpen;
   if (!inboxReviewOpen) return;
 
-  const inboxThoughts = getInboxThoughts();
-  const current = getCurrentInboxReviewThought();
+  els.reviewModeInput.value = reviewMode;
+  const items = getReviewItems();
+  const item = getCurrentReviewItem();
+  const current = item?.thought || null;
   const candidates = state.thoughts.filter((thought) => thought.id !== current?.id);
   const targetId = els.inboxReviewTargetInput.value;
-  els.inboxReviewProgress.textContent = inboxThoughts.length
-    ? `${inboxReviewIndex + 1} of ${inboxThoughts.length} unplaced thoughts`
-    : "No unplaced thoughts.";
-  els.inboxReviewTitle.textContent = current?.title || "Inbox clear";
-  els.inboxReviewNote.textContent = current?.note?.trim() || "Captured thoughts will appear here until you connect them.";
+  els.inboxReviewProgress.textContent = items.length
+    ? `${inboxReviewIndex + 1} of ${items.length} ${getReviewModeLabel(reviewMode).toLowerCase()}`
+    : `No ${getReviewModeLabel(reviewMode).toLowerCase()}.`;
+  els.inboxReviewTitle.textContent = item?.title || "Review clear";
+  els.inboxReviewNote.textContent = item?.note || "Nothing needs attention in this queue.";
   els.inboxReviewTargetInput.replaceChildren(
     ...candidates.map((thought) => optionElement(thought.id, thought.title)),
   );
   if (candidates.some((thought) => thought.id === targetId)) els.inboxReviewTargetInput.value = targetId;
-  const disabled = !current || !candidates.length;
+  const placementMode = reviewMode === "unplaced" || reviewMode === "orphaned";
+  const disabled = !current || !candidates.length || !placementMode;
+  const targetLabel = els.inboxReviewTargetInput.closest("label") as HTMLElement | null;
+  if (targetLabel) targetLabel.hidden = !placementMode;
   [els.inboxReviewTargetInput, els.inboxReviewChildButton, els.inboxReviewParentButton, els.inboxReviewRelatedButton].forEach((element) => {
     element.disabled = disabled;
+    element.hidden = !placementMode;
   });
-  els.inboxReviewPrevButton.disabled = inboxThoughts.length < 2;
-  els.inboxReviewNextButton.disabled = inboxThoughts.length < 2;
+  els.reviewOpenNoteButton.hidden = placementMode;
+  els.reviewOpenNoteButton.disabled = !current;
+  els.reviewFixButton.hidden = reviewMode !== "missing-mentions";
+  els.reviewFixButton.disabled = !item?.missingTitle;
+  els.inboxReviewPrevButton.disabled = items.length < 2;
+  els.inboxReviewNextButton.disabled = items.length < 2;
   els.inboxReviewKeepButton.disabled = !current;
   renderInboxReviewPreview();
+}
+
+function onReviewModeChange() {
+  reviewMode = els.reviewModeInput.value as ReviewModeId;
+  inboxReviewIndex = 0;
+  renderInboxReview();
+}
+
+function getFirstPopulatedReviewMode(): ReviewModeId {
+  const modes: ReviewModeId[] = ["unplaced", "orphaned", "missing-mentions", "open-questions", "stale-notes", "unchecked-tasks"];
+  return modes.find((mode) => getReviewItems(mode).length) || "unplaced";
+}
+
+function getReviewModeLabel(mode: ReviewModeId): string {
+  const labels: Record<ReviewModeId, string> = {
+    unplaced: "Unplaced thoughts",
+    orphaned: "Orphaned thoughts",
+    "missing-mentions": "Missing mentions",
+    "open-questions": "Open questions",
+    "stale-notes": "Stale notes",
+    "unchecked-tasks": "Unchecked tasks",
+  };
+  return labels[mode];
+}
+
+function getReviewItems(mode: ReviewModeId = reviewMode): ReviewItem[] {
+  if (mode === "unplaced") {
+    return getInboxThoughts().slice().sort(compareThoughtsByTitle).map((thought) => ({
+      id: thought.id,
+      thought,
+      title: thought.title,
+      note: thought.note.trim() || "Captured thoughts stay here until they are connected.",
+      mode,
+    }));
+  }
+
+  if (mode === "orphaned") {
+    const graphThoughts = getGraphThoughts();
+    const rootId = getOutlineRoots(graphThoughts)[0]?.id || "";
+    return graphThoughts
+      .filter((thought) => thought.id !== rootId && !getParentThoughts(thought.id).length)
+      .sort(compareThoughtsByTitle)
+      .map((thought) => ({
+        id: thought.id,
+        thought,
+        title: thought.title,
+        note: "This thought has no parent. Place it under another thought or connect it beside a peer.",
+        mode,
+      }));
+  }
+
+  if (mode === "missing-mentions") {
+    return state.thoughts.flatMap((thought) => {
+      const missing = getMentionTitles(thought.note).filter((title) => !getThoughtByTitle(title));
+      return [...new Set(missing)].map((missingTitle) => ({
+        id: `${thought.id}:${missingTitle}`,
+        thought,
+        title: `${thought.title} mentions [[${missingTitle}]]`,
+        note: `Missing thought: ${missingTitle}`,
+        mode,
+        missingTitle,
+      }));
+    }).sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  if (mode === "open-questions") {
+    return state.thoughts
+      .filter((thought) => thought.kind === "question" || thought.tags.includes("question") || thought.tags.includes("open-question") || /\?/.test(`${thought.title} ${thought.note}`))
+      .sort(compareThoughtsByTitle)
+      .map((thought) => ({
+        id: thought.id,
+        thought,
+        title: thought.title,
+        note: thought.note.trim() || "Question thought without supporting notes yet.",
+        mode,
+      }));
+  }
+
+  if (mode === "stale-notes") {
+    const cutoff = Date.now() - 1000 * 60 * 60 * 24 * 30;
+    return state.thoughts
+      .filter((thought) => thought.note.trim() && Date.parse(thought.updatedAt || "") < cutoff)
+      .sort((a, b) => Date.parse(a.updatedAt || "") - Date.parse(b.updatedAt || ""))
+      .map((thought) => ({
+        id: thought.id,
+        thought,
+        title: thought.title,
+        note: `Last edited ${formatDate(thought.updatedAt)}.`,
+        mode,
+      }));
+  }
+
+  return state.thoughts
+    .filter((thought) => /(^|\n)\s*[-*+]\s+\[\s\]\s+/.test(thought.note))
+    .sort(compareThoughtsByTitle)
+    .map((thought) => ({
+      id: thought.id,
+      thought,
+      title: thought.title,
+      note: "This note has unchecked tasks.",
+      mode,
+    }));
+}
+
+function openReviewNote() {
+  const item = getCurrentReviewItem();
+  if (!item) return;
+  selectThought(item.thought.id, { center: false });
+  setDetailsTab("notes");
+  openNoteWorkspace();
+}
+
+function fixCurrentReviewItem() {
+  const item = getCurrentReviewItem();
+  if (!item?.missingTitle) {
+    openReviewNote();
+    return;
+  }
+  selectThought(item.thought.id, { center: false });
+  addThought(item.missingTitle, item.thought.id, "related", { note: `Created from [[${item.missingTitle}]] mention in ${item.thought.title}.` });
+  inboxReviewIndex = Math.min(inboxReviewIndex, Math.max(getReviewItems().length - 1, 0));
+  renderInboxReview();
+  setStatus("Mention thought created");
+}
+
+function formatDate(value: string | undefined): string {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "an unknown date";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function previousInboxReviewThought() {
@@ -2931,27 +3329,27 @@ function nextInboxReviewThought() {
 }
 
 function moveInboxReviewThought(direction: number) {
-  const inboxThoughts = getInboxThoughts();
-  if (inboxThoughts.length < 2) return;
-  inboxReviewIndex = (inboxReviewIndex + direction + inboxThoughts.length) % inboxThoughts.length;
+  const items = getReviewItems();
+  if (items.length < 2) return;
+  inboxReviewIndex = (inboxReviewIndex + direction + items.length) % items.length;
   renderInboxReview();
 }
 
 function placeInboxReviewThought(relation) {
-  const current = getCurrentInboxReviewThought();
+  const current = getCurrentReviewItem()?.thought || null;
   const targetId = els.inboxReviewTargetInput.value;
   if (!current || !targetId) return;
   selectThought(current.id, { center: false });
   addLink(current.id, targetId, relation);
-  inboxReviewIndex = Math.min(inboxReviewIndex, Math.max(getInboxThoughts().length - 1, 0));
+  inboxReviewIndex = Math.min(inboxReviewIndex, Math.max(getReviewItems().length - 1, 0));
   renderInboxReview();
   setStatus("Thought placed");
 }
 
 function keepInboxReviewThought() {
-  const inboxThoughts = getInboxThoughts();
-  if (!inboxThoughts.length) return;
-  inboxReviewIndex = (inboxReviewIndex + 1) % inboxThoughts.length;
+  const items = getReviewItems();
+  if (!items.length) return;
+  inboxReviewIndex = (inboxReviewIndex + 1) % items.length;
   renderInboxReview();
 }
 
@@ -2983,6 +3381,211 @@ function focusSearch() {
   }
   els.searchInput.focus();
   els.searchInput.select();
+}
+
+function openCommandPalette(mode: CommandPaletteMode = "root") {
+  commandPaletteOpen = true;
+  commandPaletteMode = mode;
+  commandPaletteActiveIndex = 0;
+  els.commandPaletteInput.value = "";
+  closeContextMenu();
+  closeMoreMenu();
+  closeMobileCapture();
+  renderCommandPalette();
+  requestAnimationFrame(() => els.commandPaletteInput.focus());
+}
+
+function closeCommandPalette() {
+  if (!commandPaletteOpen) return;
+  commandPaletteOpen = false;
+  commandPaletteMode = "root";
+  renderCommandPalette();
+}
+
+function renderCommandPalette() {
+  els.commandPalette.hidden = !commandPaletteOpen;
+  if (!commandPaletteOpen) return;
+  const items = getCommandPaletteItems();
+  commandPaletteActiveIndex = clamp(commandPaletteActiveIndex, 0, Math.max(items.length - 1, 0));
+  els.commandPaletteInput.placeholder = getCommandPalettePlaceholder();
+  els.commandPaletteHint.textContent = getCommandPaletteHint();
+  els.commandPaletteList.replaceChildren(
+    ...(items.length ? items.map((item, index) => createCommandPaletteRow(item, index)) : [emptyListMessage("No matches")]),
+  );
+}
+
+function createCommandPaletteRow(item: CommandPaletteItem, index: number): HTMLElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `command-palette-row${index === commandPaletteActiveIndex ? " active" : ""}`;
+  button.setAttribute("role", "option");
+  button.setAttribute("aria-selected", String(index === commandPaletteActiveIndex));
+  button.addEventListener("mouseenter", () => {
+    commandPaletteActiveIndex = index;
+    renderCommandPalette();
+  });
+  button.addEventListener("click", item.action);
+  const title = document.createElement("span");
+  title.textContent = item.title;
+  const meta = document.createElement("small");
+  meta.textContent = item.meta;
+  button.append(title, meta);
+  return button;
+}
+
+function onCommandPaletteKeydown(event: KeyboardEvent) {
+  const items = getCommandPaletteItems();
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeCommandPalette();
+    return;
+  }
+  if (event.key === "Backspace" && commandPaletteMode !== "root" && !els.commandPaletteInput.value) {
+    event.preventDefault();
+    commandPaletteMode = "root";
+    commandPaletteActiveIndex = 0;
+    renderCommandPalette();
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    commandPaletteActiveIndex = items.length ? (commandPaletteActiveIndex + 1) % items.length : 0;
+    renderCommandPalette();
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    commandPaletteActiveIndex = items.length ? (commandPaletteActiveIndex - 1 + items.length) % items.length : 0;
+    renderCommandPalette();
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    items[commandPaletteActiveIndex]?.action();
+  }
+}
+
+function getCommandPaletteItems(): CommandPaletteItem[] {
+  const query = els.commandPaletteInput.value.trim();
+  if (commandPaletteMode === "create") {
+    return query
+      ? [{ id: "create", title: `Create "${query}"`, meta: state.selectedId ? "Connected below selected thought" : "Captured to inbox", action: () => runPaletteAction(() => { addThought(query); }) }]
+      : [];
+  }
+  if (commandPaletteMode === "connect") {
+    const selected = getSelectedThought();
+    return selected
+      ? filterPaletteItems(state.thoughts
+        .filter((thought) => thought.id !== selected.id)
+        .sort(compareThoughtsByTitle)
+        .map((thought) => ({
+          id: thought.id,
+          title: thought.title,
+          meta: "Connect beside selected thought",
+          action: () => runPaletteAction(() => addLink(selected.id, thought.id, "related")),
+        })), query)
+      : [{ id: "no-selection", title: "Select a thought first", meta: "Connect needs an active thought", action: () => undefined }];
+  }
+  if (commandPaletteMode === "jump") {
+    return getJumpCommandItems(query);
+  }
+  if (commandPaletteMode === "tag") {
+    const selected = getSelectedThought();
+    const tags = query ? normalizeTags(query) : [];
+    const existingTags = getAllTags().map((tag) => ({
+      id: tag,
+      title: `#${tag}`,
+      meta: selected?.tags.includes(tag) ? "Already on selected thought" : "Add tag",
+      action: () => runPaletteAction(() => addTagToSelected(tag)),
+    }));
+    const createTag = tags[0] && !getAllTags().includes(tags[0])
+      ? [{ id: `new-${tags[0]}`, title: `Add #${tags[0]}`, meta: "New tag", action: () => runPaletteAction(() => addTagToSelected(tags[0])) }]
+      : [];
+    return selected ? [...createTag, ...filterPaletteItems(existingTags, query)] : [{ id: "no-selection", title: "Select a thought first", meta: "Tags apply to the active thought", action: () => undefined }];
+  }
+  if (commandPaletteMode === "export") {
+    return [
+      { id: "backup", title: "Backup JSON", meta: "All projects and snapshots", action: () => runPaletteAction(exportMap) },
+      { id: "markdown", title: "Export notes", meta: "Single Markdown document", action: () => runPaletteAction(exportMarkdown) },
+      { id: "markdown-folder", title: "Markdown folder", meta: "One file per thought", action: () => runPaletteAction(exportMarkdownFolder) },
+      { id: "opml", title: "Export OPML", meta: "Outline hierarchy", action: () => runPaletteAction(exportOpml) },
+      { id: "canvas", title: "JSON Canvas", meta: "Obsidian-compatible canvas", action: () => runPaletteAction(exportJsonCanvas) },
+      { id: "svg", title: "Export SVG", meta: "Visible map", action: () => runPaletteAction(exportSvg) },
+      { id: "png", title: "Export PNG", meta: "Visible map", action: () => runPaletteAction(exportPng) },
+    ];
+  }
+
+  const commands: CommandPaletteItem[] = [
+    { id: "create", title: "Create thought", meta: "Enter a title", action: () => switchCommandPaletteMode("create") },
+    { id: "connect", title: "Connect thought", meta: "Relate selected thought to another", action: () => switchCommandPaletteMode("connect") },
+    { id: "jump", title: "Jump to thought", meta: "Search by title, note, or tag", action: () => switchCommandPaletteMode("jump") },
+    { id: "tag", title: "Add tag", meta: "Apply to selected thought", action: () => switchCommandPaletteMode("tag") },
+    { id: "note", title: "Open note", meta: "Focused writing surface", action: () => runPaletteAction(openNoteWorkspace) },
+    { id: "export", title: "Export", meta: "JSON, Markdown, OPML, Canvas, SVG, PNG", action: () => switchCommandPaletteMode("export") },
+    { id: "review", title: "Review thinking queues", meta: "Unplaced, mentions, questions, tasks", action: () => runPaletteAction(() => openInboxReview(getFirstPopulatedReviewMode())) },
+    { id: "snapshots", title: "Snapshots", meta: "Create or restore named versions", action: () => runPaletteAction(openSnapshotPanel) },
+  ];
+  return [
+    ...filterPaletteItems(commands, query),
+    ...getJumpCommandItems(query).slice(0, query ? 8 : 4),
+  ];
+}
+
+function getJumpCommandItems(query: string): CommandPaletteItem[] {
+  return filterPaletteItems(state.thoughts.slice().sort(compareThoughtsByTitle).map((thought) => ({
+    id: thought.id,
+    title: thought.title,
+    meta: [getKindName(thought.kind), thought.tags[0] ? `#${thought.tags[0]}` : "", isInboxThought(thought.id) ? "inbox" : ""].filter(Boolean).join(" · "),
+    action: () => runPaletteAction(() => selectThought(thought.id)),
+  })), query);
+}
+
+function filterPaletteItems(items: CommandPaletteItem[], query: string): CommandPaletteItem[] {
+  const normalized = query.toLowerCase();
+  if (!normalized) return items;
+  return items.filter((item) => `${item.title} ${item.meta}`.toLowerCase().includes(normalized));
+}
+
+function switchCommandPaletteMode(mode: CommandPaletteMode) {
+  commandPaletteMode = mode;
+  commandPaletteActiveIndex = 0;
+  els.commandPaletteInput.value = "";
+  renderCommandPalette();
+  requestAnimationFrame(() => els.commandPaletteInput.focus());
+}
+
+function runPaletteAction(action: () => void | Promise<void>) {
+  closeCommandPalette();
+  void action();
+}
+
+function addTagToSelected(tag: string) {
+  const selected = getSelectedThought();
+  const normalized = normalizeTags(tag)[0];
+  if (!selected || !normalized || selected.tags.includes(normalized)) return;
+  pushHistory();
+  selected.tags = normalizeTags([...selected.tags, normalized]);
+  touchThought(selected);
+  render();
+  persistState();
+  setStatus("Tag added");
+}
+
+function getCommandPalettePlaceholder(): string {
+  const placeholders: Record<CommandPaletteMode, string> = {
+    root: "Create, connect, jump, tag, note, export...",
+    create: "Thought title",
+    connect: "Thought to connect",
+    jump: "Thought to jump to",
+    tag: "Tag to add",
+    export: "Export format",
+  };
+  return placeholders[commandPaletteMode];
+}
+
+function getCommandPaletteHint(): string {
+  if (commandPaletteMode === "root") return "Ctrl+P or Ctrl+/";
+  return "Enter to run · Backspace to go back · Esc to close";
 }
 
 function onMobileCaptureSubmit(event) {
@@ -3030,6 +3633,95 @@ function renderMentionPanels(selected) {
   els.mentionList.replaceChildren(
     ...mentions.map((thought) => createThoughtActionItem(thought, "Link", () => addLink(selected.id, thought.id, "related"), true)),
   );
+}
+
+function renderAttachmentPanel(selected: Thought) {
+  const attachments = selected.attachments || [];
+  els.attachmentList.replaceChildren(
+    ...(attachments.length
+      ? attachments.map((attachment) => createAttachmentRow(selected, attachment))
+      : [emptyListMessage("No sources yet")]),
+  );
+}
+
+function createAttachmentRow(selected: Thought, attachment: ThoughtAttachment): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "source-row";
+
+  const copy = document.createElement("div");
+  copy.className = "source-copy";
+  const title = document.createElement(isSafeExternalRef(attachment.ref) ? "a" : "span");
+  title.className = "source-title";
+  title.textContent = attachment.title || attachment.ref;
+  if (title instanceof HTMLAnchorElement) {
+    title.href = attachment.ref;
+    title.target = "_blank";
+    title.rel = "noopener noreferrer";
+  }
+  const meta = document.createElement("span");
+  meta.textContent = `${attachment.kind === "file" ? "File" : "URL"} · ${attachment.ref}`;
+  copy.append(title, meta);
+
+  const removeButton = document.createElement("button");
+  removeButton.type = "button";
+  removeButton.textContent = "Remove";
+  removeButton.addEventListener("click", () => removeAttachment(selected.id, attachment.id));
+
+  item.append(copy, removeButton);
+  return item;
+}
+
+function onAttachmentSubmit(event: SubmitEvent) {
+  event.preventDefault();
+  const selected = getSelectedThought();
+  const ref = els.attachmentRefInput.value.trim();
+  if (!selected || !ref) return;
+  pushHistory();
+  const title = els.attachmentTitleInput.value.trim() || inferAttachmentTitle(ref);
+  selected.attachments = [...(selected.attachments || []), {
+    id: makeId("source"),
+    kind: els.attachmentKindInput.value === "file" ? "file" : "url",
+    title,
+    ref,
+    preview: "",
+  }];
+  touchThought(selected);
+  els.attachmentTitleInput.value = "";
+  els.attachmentRefInput.value = "";
+  renderDetails();
+  persistState();
+  setStatus("Source added");
+}
+
+function removeAttachment(thoughtId: string, attachmentId: string) {
+  const thought = getThought(thoughtId);
+  if (!thought) return;
+  pushHistory();
+  thought.attachments = (thought.attachments || []).filter((attachment) => attachment.id !== attachmentId);
+  touchThought(thought);
+  renderDetails();
+  persistState();
+}
+
+function inferAttachmentTitle(ref: string): string {
+  try {
+    const url = new URL(ref);
+    return url.hostname.replace(/^www\./, "") || "Source link";
+  } catch {
+    const name = ref.replace(/\\/g, "/").split("/").filter(Boolean).pop();
+    return name || "File reference";
+  }
+}
+
+function isSafeExternalRef(ref: string): boolean {
+  return /^(https?:|mailto:)/i.test(ref);
+}
+
+function emptyListMessage(message: string): HTMLElement {
+  const empty = document.createElement("p");
+  empty.className = "empty-inline";
+  empty.textContent = message;
+  return empty;
 }
 
 function createThoughtActionItem(thought, label, action, suggestion = false) {
@@ -3183,6 +3875,110 @@ function closeMoreMenu() {
 function renderMoreMenu() {
   els.moreMenu.hidden = !moreMenuOpen;
   els.moreButton.classList.toggle("active", moreMenuOpen);
+}
+
+function openSnapshotPanel() {
+  snapshotPanelOpen = true;
+  closeMoreMenu();
+  closeMobileCapture();
+  renderSnapshotPanel();
+  requestAnimationFrame(() => els.snapshotNameInput.focus());
+}
+
+function closeSnapshotPanel() {
+  if (!snapshotPanelOpen) return;
+  snapshotPanelOpen = false;
+  renderSnapshotPanel();
+}
+
+function renderSnapshotPanel() {
+  els.snapshotPanel.hidden = !snapshotPanelOpen;
+  if (!snapshotPanelOpen) return;
+  const snapshots = getSnapshots();
+  if (!els.snapshotNameInput.value) {
+    els.snapshotNameInput.value = defaultSnapshotName();
+  }
+  els.snapshotList.replaceChildren(
+    ...(snapshots.length
+      ? snapshots.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(createSnapshotRow)
+      : [emptyListMessage("No snapshots yet")]),
+  );
+}
+
+function createSnapshot() {
+  const project = getActiveProject();
+  const name = els.snapshotNameInput.value.trim() || defaultSnapshotName();
+  syncActiveProject();
+  const snapshot: ProjectSnapshot = {
+    id: makeId("snapshot"),
+    name: name.slice(0, 80),
+    createdAt: new Date().toISOString(),
+    state: sanitizeState(state),
+  };
+  project.snapshots = [snapshot, ...getSnapshots()].slice(0, 30);
+  els.snapshotNameInput.value = defaultSnapshotName();
+  renderSnapshotPanel();
+  persistState();
+  setStatus("Snapshot created");
+}
+
+function createSnapshotRow(snapshot: ProjectSnapshot): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "snapshot-row";
+  const copy = document.createElement("div");
+  copy.className = "snapshot-copy";
+  const title = document.createElement("strong");
+  title.textContent = snapshot.name;
+  const meta = document.createElement("span");
+  meta.textContent = `${formatDate(snapshot.createdAt)} · ${snapshot.state.thoughts.length} thoughts`;
+  copy.append(title, meta);
+
+  const restoreButton = document.createElement("button");
+  restoreButton.type = "button";
+  restoreButton.textContent = "Restore";
+  restoreButton.addEventListener("click", () => restoreSnapshot(snapshot.id));
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "danger-button";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", () => deleteSnapshot(snapshot.id));
+
+  row.append(copy, restoreButton, deleteButton);
+  return row;
+}
+
+function restoreSnapshot(snapshotId: string) {
+  const snapshot = getSnapshots().find((item) => item.id === snapshotId);
+  if (!snapshot) return;
+  const approved = window.confirm(`Restore snapshot "${snapshot.name}"? Your current map will be kept in undo history.`);
+  if (!approved) return;
+  pushHistory();
+  state = sanitizeState(snapshot.state);
+  syncActiveProject();
+  resetProjectSessionState();
+  render();
+  requestAnimationFrame(fitToGraph);
+  persistState();
+  setStatus("Snapshot restored");
+}
+
+function deleteSnapshot(snapshotId: string) {
+  const project = getActiveProject();
+  project.snapshots = getSnapshots().filter((snapshot) => snapshot.id !== snapshotId);
+  renderSnapshotPanel();
+  persistState();
+}
+
+function getSnapshots(): ProjectSnapshot[] {
+  const project = getActiveProject();
+  if (!Array.isArray(project.snapshots)) project.snapshots = [];
+  return project.snapshots;
+}
+
+function defaultSnapshotName(): string {
+  const date = new Date();
+  return `Snapshot ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
 function toggleSidebar() {
@@ -3767,6 +4563,78 @@ function exportMarkdown() {
   downloadFile("thoughts-map.md", lines.join("\n"), "text/markdown");
 }
 
+async function exportMarkdownFolder() {
+  const project = getActiveProject();
+  const files = projectToMarkdownFiles(project.name, state);
+  const directoryPicker = (window as unknown as { showDirectoryPicker?: (options?: unknown) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker;
+  if (directoryPicker) {
+    try {
+      const directory = await directoryPicker({ mode: "readwrite" });
+      await Promise.all(files.map((file) => writeFileToDirectory(directory, file)));
+      setStatus("Markdown folder exported");
+      return;
+    } catch (error) {
+      if ((error as DOMException)?.name === "AbortError") {
+        setStatus("Export cancelled");
+        return;
+      }
+    }
+  }
+  downloadFile(`${slugifyFilename(project.name, "thoughts-map")}-markdown.md`, projectToMarkdownBundle(project.name, state), "text/markdown");
+  setStatus("Markdown bundle exported");
+}
+
+function exportOpml() {
+  const project = getActiveProject();
+  downloadFile(`${slugifyFilename(project.name, "thoughts-map")}.opml`, projectToOpml(project.name, state), "text/x-opml");
+}
+
+function exportJsonCanvas() {
+  const project = getActiveProject();
+  downloadFile(`${slugifyFilename(project.name, "thoughts-map")}.canvas`, JSON.stringify(projectToJsonCanvas(state), null, 2), "application/json");
+}
+
+function exportSvg() {
+  downloadFile("thoughts-map.svg", serializeGraphSvg(), "image/svg+xml");
+}
+
+function exportPng() {
+  const svgText = serializeGraphSvg();
+  const image = new Image();
+  const blob = new Blob([svgText], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(graphRect.width));
+    canvas.height = Math.max(1, Math.round(graphRect.height));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      URL.revokeObjectURL(url);
+      setStatus("PNG export failed");
+      return;
+    }
+    context.drawImage(image, 0, 0);
+    canvas.toBlob((pngBlob) => {
+      URL.revokeObjectURL(url);
+      if (!pngBlob) {
+        setStatus("PNG export failed");
+        return;
+      }
+      const pngUrl = URL.createObjectURL(pngBlob);
+      const anchor = document.createElement("a");
+      anchor.href = pngUrl;
+      anchor.download = "thoughts-map.png";
+      anchor.click();
+      URL.revokeObjectURL(pngUrl);
+    }, "image/png");
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(url);
+    setStatus("PNG export failed");
+  };
+  image.src = url;
+}
+
 function downloadFile(filename, content, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -3775,6 +4643,56 @@ function downloadFile(filename, content, type) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+async function writeFileToDirectory(directory: FileSystemDirectoryHandle, file: TextFile): Promise<void> {
+  const handle = await directory.getFileHandle(file.name, { create: true });
+  const writable = await handle.createWritable();
+  await writable.write(file.text);
+  await writable.close();
+}
+
+function serializeGraphSvg(): string {
+  renderGraph();
+  const clone = els.graph.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(Math.round(graphRect.width)));
+  clone.setAttribute("height", String(Math.round(graphRect.height)));
+  clone.setAttribute("viewBox", `0 0 ${Math.round(graphRect.width)} ${Math.round(graphRect.height)}`);
+  const style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+  style.textContent = `${serializeCssVariables()}\n${collectStylesheetText()}`;
+  clone.querySelector("defs")?.prepend(style);
+  return new XMLSerializer().serializeToString(clone);
+}
+
+function serializeCssVariables(): string {
+  const computed = getComputedStyle(document.body);
+  const variables = [
+    "--stage-bg",
+    "--node-fill",
+    "--node-stroke",
+    "--link",
+    "--active-link",
+    "--accent",
+    "--accent-strong",
+    "--ink",
+    "--muted",
+    "--line",
+    "--panel-strong",
+    "--preview",
+    "--preview-soft",
+  ].map((name) => `${name}: ${computed.getPropertyValue(name).trim()};`).join(" ");
+  return `:root { ${variables} }`;
+}
+
+function collectStylesheetText(): string {
+  return Array.from(document.styleSheets).map((sheet) => {
+    try {
+      return Array.from(sheet.cssRules).map((rule) => rule.cssText).join("\n");
+    } catch {
+      return "";
+    }
+  }).join("\n");
 }
 
 function importMap(event) {
@@ -3815,6 +4733,96 @@ function importMap(event) {
     }
   };
   reader.readAsText(file);
+}
+
+async function importMarkdown(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  try {
+    const textFiles = await readTextFiles(files);
+    const approved = window.confirm("Importing Markdown will replace the current project with thoughts from the selected files.");
+    if (!approved) {
+      setStatus("Import cancelled");
+      return;
+    }
+    pushHistory();
+    state = sanitizeState(markdownFilesToState(textFiles, state));
+    syncActiveProject();
+    resetProjectSessionState();
+    render();
+    requestAnimationFrame(fitToGraph);
+    persistState();
+    setStatus("Markdown imported");
+  } catch {
+    window.alert("Those Markdown files could not be imported.");
+    setStatus("Import failed");
+  } finally {
+    input.value = "";
+  }
+}
+
+async function importOpml(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const document = new DOMParser().parseFromString(text, "application/xml");
+    if (document.querySelector("parsererror")) throw new Error("Invalid OPML");
+    const approved = window.confirm("Importing OPML will replace the current project.");
+    if (!approved) {
+      setStatus("Import cancelled");
+      return;
+    }
+    pushHistory();
+    state = sanitizeState(opmlDocumentToState(document, state));
+    syncActiveProject();
+    resetProjectSessionState();
+    render();
+    requestAnimationFrame(fitToGraph);
+    persistState();
+    setStatus("OPML imported");
+  } catch {
+    window.alert("That OPML file could not be imported.");
+    setStatus("Import failed");
+  } finally {
+    input.value = "";
+  }
+}
+
+async function importJsonCanvas(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const approved = window.confirm("Importing JSON Canvas will replace the current project.");
+    if (!approved) {
+      setStatus("Import cancelled");
+      return;
+    }
+    pushHistory();
+    state = sanitizeState(jsonCanvasToState(parsed, state));
+    syncActiveProject();
+    resetProjectSessionState();
+    render();
+    requestAnimationFrame(fitToGraph);
+    persistState();
+    setStatus("JSON Canvas imported");
+  } catch {
+    window.alert("That JSON Canvas file could not be imported.");
+    setStatus("Import failed");
+  } finally {
+    input.value = "";
+  }
+}
+
+async function readTextFiles(files: File[]): Promise<TextFile[]> {
+  return Promise.all(files.map(async (file) => ({
+    name: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+    text: await file.text(),
+  })));
 }
 
 function getThought(id) {

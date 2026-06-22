@@ -56,6 +56,7 @@
             <option value="">All tags</option>
           </select>
           <button id="inboxFilterButton" type="button" title="Show unlinked inbox thoughts">Inbox <span id="inboxCount">0</span></button>
+          <button id="reviewButton" type="button" title="Review thinking queues">Review</button>
         </div>
 
         <div class="section-heading">
@@ -67,11 +68,29 @@
         <details class="sidebar-actions data-actions">
           <summary title="Backup, import, and export">Data</summary>
           <div class="data-action-menu">
+            <button id="snapshotButton" type="button" title="Create, restore, or delete named snapshots">Snapshots</button>
             <button id="exportButton" type="button" title="Export a full JSON backup">Backup JSON</button>
             <button id="markdownExportButton" type="button" title="Export notes as a Markdown document">Export notes</button>
+            <button id="markdownFolderExportButton" type="button" title="Export one Markdown file per thought">Markdown folder</button>
+            <button id="opmlExportButton" type="button" title="Export the hierarchy as OPML">Export OPML</button>
+            <button id="jsonCanvasExportButton" type="button" title="Export to Obsidian JSON Canvas">JSON Canvas</button>
+            <button id="svgExportButton" type="button" title="Export the visible map as SVG">Export SVG</button>
+            <button id="pngExportButton" type="button" title="Export the visible map as PNG">Export PNG</button>
             <label class="file-button">
               Import JSON
-              <input id="importInput" type="file" accept="application/json" />
+              <input id="importInput" type="file" accept=".json,application/json" />
+            </label>
+            <label class="file-button">
+              Import Markdown
+              <input id="markdownImportInput" type="file" accept=".md,.markdown,text/markdown" multiple webkitdirectory />
+            </label>
+            <label class="file-button">
+              Import OPML
+              <input id="opmlImportInput" type="file" accept=".opml,.xml,text/xml,application/xml" />
+            </label>
+            <label class="file-button">
+              Import Canvas
+              <input id="jsonCanvasImportInput" type="file" accept=".canvas,.json,application/json" />
             </label>
           </div>
         </details>
@@ -94,6 +113,7 @@
           <div class="stage-view-switch" role="tablist" aria-label="Stage view">
             <button id="mapViewButton" class="active" type="button" role="tab" aria-selected="true">Map</button>
             <button id="outlineViewButton" type="button" role="tab" aria-selected="false">Outline</button>
+            <button id="walkViewButton" type="button" role="tab" aria-selected="false">Walk</button>
           </div>
           <button id="fitButton" type="button" title="Fit map" aria-label="Fit map">Fit</button>
           <button id="settingsButton" type="button" title="Open settings" aria-label="Open settings">Settings</button>
@@ -130,6 +150,25 @@
             <div id="outlineTree" class="outline-tree"></div>
           </div>
         </section>
+        <section id="walkView" class="walk-view" aria-label="Walk mode" hidden>
+          <div class="walk-board">
+            <header class="walk-header">
+              <div>
+                <span>Walk</span>
+                <h2 id="walkTitle">Select a thought</h2>
+              </div>
+              <p id="walkProgress">0 of 0</p>
+            </header>
+            <p id="walkMeta" class="walk-meta"></p>
+            <div id="walkNote" class="walk-note"></div>
+            <div id="walkContext" class="walk-context"></div>
+            <div class="walk-actions">
+              <button id="walkPrevButton" type="button">Previous</button>
+              <button id="walkNextButton" type="button">Next</button>
+              <button id="walkMapButton" type="button">Show on map</button>
+            </div>
+          </div>
+        </section>
         <div id="stagePrompt" class="stage-prompt" hidden>Select a thought, or press Ctrl+K to capture.</div>
       </main>
 
@@ -157,6 +196,7 @@
             <button id="detailsTabDetails" class="details-tab active" type="button" role="tab" aria-selected="true" aria-controls="detailsTabPanelDetails">Details</button>
             <button id="detailsTabNotes" class="details-tab" type="button" role="tab" aria-selected="false" aria-controls="detailsTabPanelNotes">Notes</button>
             <button id="detailsTabLinks" class="details-tab" type="button" role="tab" aria-selected="false" aria-controls="detailsTabPanelLinks">Links</button>
+            <button id="detailsTabSources" class="details-tab" type="button" role="tab" aria-selected="false" aria-controls="detailsTabPanelSources">Sources</button>
           </div>
 
           <div id="detailsTabPanelDetails" class="details-tab-panel details-overview-panel" role="tabpanel" aria-labelledby="detailsTabDetails">
@@ -266,6 +306,28 @@
             </div>
             <div id="mentionList" class="connection-list"></div>
           </div>
+
+          <div id="detailsTabPanelSources" class="details-tab-panel details-sources-panel" role="tabpanel" aria-labelledby="detailsTabSources" hidden>
+            <form id="attachmentForm" class="link-form source-form">
+              <label class="field link-search-field">
+                <span>Title</span>
+                <input id="attachmentTitleInput" type="text" maxlength="100" placeholder="Article, file, transcript..." autocomplete="off" />
+              </label>
+              <div class="link-inline-row source-inline-row">
+                <select id="attachmentKindInput" aria-label="Source type">
+                  <option value="url">URL</option>
+                  <option value="file">File reference</option>
+                </select>
+                <input id="attachmentRefInput" type="text" maxlength="2048" placeholder="https://... or file path" autocomplete="off" />
+                <button type="submit">Add</button>
+              </div>
+            </form>
+            <div class="section-heading">
+              <span>Sources</span>
+              <span></span>
+            </div>
+            <div id="attachmentList" class="source-list"></div>
+          </div>
         </section>
       </aside>
 
@@ -308,10 +370,18 @@
     <section id="inboxReviewPanel" class="inbox-review" hidden aria-label="Inbox review">
       <header>
         <div>
-          <h2>Inbox</h2>
+          <h2>Review</h2>
           <p id="inboxReviewProgress">No unplaced thoughts.</p>
         </div>
         <div class="inbox-review-header-actions">
+          <select id="reviewModeInput" aria-label="Review mode">
+            <option value="unplaced">Unplaced</option>
+            <option value="orphaned">Orphaned</option>
+            <option value="missing-mentions">Missing mentions</option>
+            <option value="open-questions">Open questions</option>
+            <option value="stale-notes">Stale notes</option>
+            <option value="unchecked-tasks">Unchecked tasks</option>
+          </select>
           <button id="inboxReviewPrevButton" type="button">Previous</button>
           <button id="inboxReviewNextButton" type="button">Next</button>
           <button id="inboxReviewCloseButton" type="button" aria-label="Close inbox review">Close</button>
@@ -332,8 +402,39 @@
           <button id="inboxReviewChildButton" type="button">Place below</button>
           <button id="inboxReviewParentButton" type="button">Place above</button>
           <button id="inboxReviewRelatedButton" type="button">Connect beside</button>
+          <button id="reviewOpenNoteButton" type="button">Open note</button>
+          <button id="reviewFixButton" type="button">Fix</button>
           <button id="inboxReviewKeepButton" type="button">Skip for now</button>
         </div>
+      </div>
+    </section>
+
+    <section id="commandPalette" class="command-palette" hidden role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="command-palette-panel">
+        <header>
+          <span>Command</span>
+          <button id="commandPaletteCloseButton" type="button" aria-label="Close command palette">Close</button>
+        </header>
+        <input id="commandPaletteInput" type="search" autocomplete="off" placeholder="Create, connect, jump, tag, note, export..." />
+        <div id="commandPaletteList" class="command-palette-list" role="listbox"></div>
+        <p id="commandPaletteHint">Ctrl+P or Ctrl+/</p>
+      </div>
+    </section>
+
+    <section id="snapshotPanel" class="snapshot-panel" hidden role="dialog" aria-modal="true" aria-label="Snapshots">
+      <div class="snapshot-card">
+        <header>
+          <div>
+            <h2>Snapshots</h2>
+            <p>Named restore points for this project.</p>
+          </div>
+          <button id="snapshotCloseButton" type="button" aria-label="Close snapshots">Close</button>
+        </header>
+        <div class="snapshot-create-row">
+          <input id="snapshotNameInput" type="text" maxlength="80" placeholder="Before restructuring" autocomplete="off" />
+          <button id="createSnapshotButton" type="button">Create snapshot</button>
+        </div>
+        <div id="snapshotList" class="snapshot-list"></div>
       </div>
     </section>
 

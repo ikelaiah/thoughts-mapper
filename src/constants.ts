@@ -4,7 +4,7 @@ export const DB_NAME = "thoughts-mapper";
 export const DB_VERSION = 1;
 export const STORE_NAME = "documents";
 export const DOC_KEY = "main";
-export const APP_DATA_VERSION = 3;
+export const APP_DATA_VERSION = 4;
 export const HISTORY_LIMIT = 60;
 export const NEW_KIND_VALUE = "__new-kind__";
 export const DEFAULT_KIND_ID = "thought";
@@ -56,6 +56,7 @@ export const seedState: ProjectState = {
       kind: "project",
       note: "A free, local-first visual thinking space.",
       tags: ["home"],
+      attachments: [],
       x: 0,
       y: 0,
     },
@@ -65,6 +66,7 @@ export const seedState: ProjectState = {
       kind: "idea",
       note: "IndexedDB keeps the map in this browser.",
       tags: ["local-first"],
+      attachments: [],
       x: -260,
       y: -140,
     },
@@ -74,6 +76,7 @@ export const seedState: ProjectState = {
       kind: "idea",
       note: "Add, search, connect, and write without friction.",
       tags: ["ux"],
+      attachments: [],
       x: 260,
       y: -120,
     },
@@ -83,6 +86,7 @@ export const seedState: ProjectState = {
       kind: "resource",
       note: "Each thought has a focused writing area.",
       tags: ["notes"],
+      attachments: [],
       x: -210,
       y: 160,
     },
@@ -92,6 +96,7 @@ export const seedState: ProjectState = {
       kind: "question",
       note: "Files, web sync, tags, AI search, sharing, and backups.",
       tags: ["roadmap"],
+      attachments: [],
       x: 240,
       y: 160,
     },

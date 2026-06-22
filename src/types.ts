@@ -10,8 +10,20 @@ export type Thought = {
   kind: string;
   note: string;
   tags: string[];
+  attachments: ThoughtAttachment[];
+  updatedAt?: string;
   x: number;
   y: number;
+};
+
+export type ThoughtAttachmentKind = "url" | "file";
+
+export type ThoughtAttachment = {
+  id: string;
+  kind: ThoughtAttachmentKind;
+  title: string;
+  ref: string;
+  preview?: string;
 };
 
 export type LinkType = "parent" | "related";
@@ -53,7 +65,15 @@ export type Project = {
   id: string;
   name: string;
   state: ProjectState;
+  snapshots: ProjectSnapshot[];
   updatedAt?: string;
+};
+
+export type ProjectSnapshot = {
+  id: string;
+  name: string;
+  createdAt: string;
+  state: ProjectState;
 };
 
 export type AppData = {
@@ -93,8 +113,8 @@ export type GraphDepthStyle = {
 
 export type LinkRelation = "parent-of" | "child-of" | "related";
 export type RetargetRelation = LinkRelation | "sibling";
-export type DetailsTabId = "details" | "notes" | "links";
-export type StageViewId = "map" | "outline";
+export type DetailsTabId = "details" | "notes" | "links" | "sources";
+export type StageViewId = "map" | "outline" | "walk";
 export type CreateHandleDirection = "top" | "right" | "bottom" | "left";
 export type PositionMap = Map<string, Point>;
 export type SvgAttrs = Record<string, string | number | boolean>;
@@ -175,13 +195,23 @@ export type AppElements = {
   quickCaptureInput: HTMLInputElement;
   tagFilterInput: HTMLSelectElement;
   inboxFilterButton: HTMLButtonElement;
+  reviewButton: HTMLButtonElement;
   inboxCount: HTMLElement;
   thoughtCount: HTMLElement;
   thoughtList: HTMLElement;
   sidebarActions: HTMLElement;
   exportButton: HTMLButtonElement;
   markdownExportButton: HTMLButtonElement;
+  markdownFolderExportButton: HTMLButtonElement;
+  opmlExportButton: HTMLButtonElement;
+  jsonCanvasExportButton: HTMLButtonElement;
+  svgExportButton: HTMLButtonElement;
+  pngExportButton: HTMLButtonElement;
+  snapshotButton: HTMLButtonElement;
   importInput: HTMLInputElement;
+  markdownImportInput: HTMLInputElement;
+  opmlImportInput: HTMLInputElement;
+  jsonCanvasImportInput: HTMLInputElement;
   sidebarToggleButton: HTMLButtonElement;
   detailsToggleButton: HTMLButtonElement;
   moreButton: HTMLButtonElement;
@@ -197,10 +227,20 @@ export type AppElements = {
   stagePrompt: HTMLElement;
   mapViewButton: HTMLButtonElement;
   outlineViewButton: HTMLButtonElement;
+  walkViewButton: HTMLButtonElement;
   outlineView: HTMLElement;
   outlineTitle: HTMLElement;
   outlineSummary: HTMLElement;
   outlineTree: HTMLElement;
+  walkView: HTMLElement;
+  walkTitle: HTMLElement;
+  walkMeta: HTMLElement;
+  walkNote: HTMLElement;
+  walkContext: HTMLElement;
+  walkProgress: HTMLElement;
+  walkPrevButton: HTMLButtonElement;
+  walkNextButton: HTMLButtonElement;
+  walkMapButton: HTMLButtonElement;
   settingsPage: HTMLElement;
   settingsCloseButton: HTMLButtonElement;
   mobileManagement: HTMLElement;
@@ -224,9 +264,11 @@ export type AppElements = {
   detailsTabDetails: HTMLButtonElement;
   detailsTabNotes: HTMLButtonElement;
   detailsTabLinks: HTMLButtonElement;
+  detailsTabSources: HTMLButtonElement;
   detailsTabPanelDetails: HTMLElement;
   detailsTabPanelNotes: HTMLElement;
   detailsTabPanelLinks: HTMLElement;
+  detailsTabPanelSources: HTMLElement;
   selectedType: HTMLElement;
   deleteButton: HTMLButtonElement;
   titleInput: HTMLInputElement;
@@ -261,7 +303,13 @@ export type AppElements = {
   backlinkList: HTMLElement;
   mentionCount: HTMLElement;
   mentionList: HTMLElement;
+  attachmentForm: HTMLFormElement;
+  attachmentKindInput: HTMLSelectElement;
+  attachmentTitleInput: HTMLInputElement;
+  attachmentRefInput: HTMLInputElement;
+  attachmentList: HTMLElement;
   inboxReviewPanel: HTMLElement;
+  reviewModeInput: HTMLSelectElement;
   inboxReviewProgress: HTMLElement;
   inboxReviewCloseButton: HTMLButtonElement;
   inboxReviewPrevButton: HTMLButtonElement;
@@ -274,6 +322,18 @@ export type AppElements = {
   inboxReviewParentButton: HTMLButtonElement;
   inboxReviewRelatedButton: HTMLButtonElement;
   inboxReviewKeepButton: HTMLButtonElement;
+  reviewOpenNoteButton: HTMLButtonElement;
+  reviewFixButton: HTMLButtonElement;
+  commandPalette: HTMLElement;
+  commandPaletteInput: HTMLInputElement;
+  commandPaletteList: HTMLElement;
+  commandPaletteHint: HTMLElement;
+  commandPaletteCloseButton: HTMLButtonElement;
+  snapshotPanel: HTMLElement;
+  snapshotNameInput: HTMLInputElement;
+  createSnapshotButton: HTMLButtonElement;
+  snapshotList: HTMLElement;
+  snapshotCloseButton: HTMLButtonElement;
   contextMenu: HTMLElement;
   nodeCreateForm: HTMLFormElement;
   nodeCreateInput: HTMLInputElement;

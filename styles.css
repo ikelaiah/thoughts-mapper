@@ -979,8 +979,23 @@ body[data-theme="dark"][data-background="eink"] .map-stage {
   box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-.outline-row.repeated {
-  opacity: 0.72;
+.outline-row.reference {
+  border-style: dashed;
+  opacity: 0.78;
+}
+
+.outline-row.reference .outline-row-title::after {
+  content: "ref";
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 780;
 }
 
 .outline-row-copy {

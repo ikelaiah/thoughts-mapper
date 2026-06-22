@@ -1091,10 +1091,11 @@ function renderOutline() {
   const graphThoughts = getGraphThoughts().slice().sort(compareThoughtsByTitle);
   const inboxThoughts = getInboxThoughts().slice().sort(compareThoughtsByTitle);
   const roots = getOutlineRoots(graphThoughts);
-  const rootNodes = roots.map((thought) => buildOutlineNode(thought, new Set()));
-  const shownIds = new Set<string>();
-  rootNodes.forEach((node) => collectOutlineIds(node, shownIds));
-  const otherPlaced = graphThoughts.filter((thought) => !shownIds.has(thought.id)).map((thought) => buildOutlineNode(thought, new Set()));
+  const outlineContext = createOutlineContext();
+  const rootNodes = roots.map((thought) => buildOutlineNode(thought, new Set(), outlineContext, null));
+  const otherPlaced = graphThoughts
+    .filter((thought) => !outlineContext.placedIds.has(thought.id))
+    .map((thought) => buildOutlineNode(thought, new Set(), outlineContext, null));
   const sections = [
     createOutlineSection("Map roots", rootNodes),
     createOutlineSection("Other placed thoughts", otherPlaced),
@@ -1123,26 +1124,47 @@ function getOutlineRoots(graphThoughts: Thought[]): Thought[] {
   return selected && graphIds.has(selected.id) ? [selected] : graphThoughts.slice(0, 1);
 }
 
-function buildOutlineNode(thought: Thought, ancestors: Set<string>) {
-  const nextAncestors = new Set(ancestors);
-  const repeated = nextAncestors.has(thought.id);
-  if (repeated) {
-    return { thought, children: [], repeated };
-  }
-  nextAncestors.add(thought.id);
+function createOutlineContext() {
   return {
-    thought,
-    repeated: false,
-    children: getChildThoughts(thought.id)
-      .slice()
-      .sort(compareThoughtsByTitle)
-      .map((child) => buildOutlineNode(child, nextAncestors)),
+    placedIds: new Set<string>(),
+    placedUnder: new Map<string, string>(),
   };
 }
 
-function collectOutlineIds(node, ids: Set<string>) {
-  ids.add(node.thought.id);
-  node.children.forEach((child) => collectOutlineIds(child, ids));
+function buildOutlineNode(thought: Thought, ancestors: Set<string>, context, parent: Thought | null) {
+  const placedUnder = context.placedUnder.get(thought.id) || "";
+  if (context.placedIds.has(thought.id)) {
+    return {
+      thought,
+      children: [],
+      reference: true,
+      referenceText: placedUnder ? `shown under ${placedUnder}` : "shown above",
+    };
+  }
+
+  const nextAncestors = new Set(ancestors);
+  const repeated = nextAncestors.has(thought.id);
+  if (repeated) {
+    return {
+      thought,
+      children: [],
+      reference: true,
+      referenceText: "cycle reference",
+    };
+  }
+
+  context.placedIds.add(thought.id);
+  context.placedUnder.set(thought.id, parent?.title || "Map roots");
+  nextAncestors.add(thought.id);
+  return {
+    thought,
+    reference: false,
+    referenceText: "",
+    children: getChildThoughts(thought.id)
+      .slice()
+      .sort(compareThoughtsByTitle)
+      .map((child) => buildOutlineNode(child, nextAncestors, context, thought)),
+  };
 }
 
 function createOutlineSection(title: string, nodes) {
@@ -1178,7 +1200,7 @@ function createOutlineThoughtSection(title: string, thoughts: Thought[]) {
 function createOutlineNodeElement(node, depth: number) {
   const item = document.createElement("div");
   item.className = "outline-node";
-  item.append(createOutlineThoughtRow(node.thought, depth, node.repeated));
+  item.append(createOutlineThoughtRow(node.thought, depth, node));
   if (node.children.length) {
     const children = document.createElement("div");
     children.className = "outline-children";
@@ -1188,9 +1210,10 @@ function createOutlineNodeElement(node, depth: number) {
   return item;
 }
 
-function createOutlineThoughtRow(thought: Thought, depth: number, repeated = false) {
+function createOutlineThoughtRow(thought: Thought, depth: number, node = null) {
+  const reference = Boolean(node?.reference);
   const row = document.createElement("button");
-  row.className = `outline-row${thought.id === state.selectedId ? " active" : ""}${repeated ? " repeated" : ""}`;
+  row.className = `outline-row${thought.id === state.selectedId ? " active" : ""}${reference ? " reference" : ""}`;
   row.type = "button";
   row.style.setProperty("--outline-indent", `${10 + depth * 24}px`);
   row.addEventListener("click", () => selectThought(thought.id));
@@ -1206,26 +1229,26 @@ function createOutlineThoughtRow(thought: Thought, depth: number, repeated = fal
   title.textContent = thought.title;
   const meta = document.createElement("span");
   meta.className = "outline-row-meta";
-  meta.textContent = getOutlineMeta(thought, repeated);
+  meta.textContent = getOutlineMeta(thought, node?.referenceText || "");
   copy.append(title, meta);
 
   const count = document.createElement("span");
   count.className = "outline-row-count";
   const childCount = getChildThoughts(thought.id).length;
-  count.textContent = childCount ? String(childCount) : "";
+  count.textContent = !reference && childCount ? String(childCount) : "";
   count.setAttribute("aria-hidden", "true");
 
   row.append(dot, copy, count);
   return row;
 }
 
-function getOutlineMeta(thought: Thought, repeated = false) {
+function getOutlineMeta(thought: Thought, referenceText = "") {
   const parts = [getKindName(thought.kind)];
   if (thought.tags[0]) parts.push(`#${thought.tags[0]}`);
   const relatedCount = getRelatedThoughts(thought.id).length;
   if (relatedCount) parts.push(`${relatedCount} beside`);
   if (isInboxThought(thought.id)) parts.push("inbox");
-  if (repeated) parts.push("shown above");
+  if (referenceText) parts.push(referenceText);
   return parts.join(" · ");
 }
 

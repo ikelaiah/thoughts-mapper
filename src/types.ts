@@ -93,6 +93,7 @@ export type GraphDepthStyle = {
 
 export type LinkRelation = "parent-of" | "child-of" | "related";
 export type RetargetRelation = LinkRelation | "sibling";
+export type DetailsTabId = "details" | "notes" | "links";
 export type CreateHandleDirection = "top" | "right" | "bottom" | "left";
 export type PositionMap = Map<string, Point>;
 export type SvgAttrs = Record<string, string | number | boolean>;
@@ -212,6 +213,12 @@ export type AppElements = {
   detailsEmpty: HTMLElement;
   detailsCloseButton: HTMLButtonElement;
   detailsPanel: HTMLElement;
+  detailsTabDetails: HTMLButtonElement;
+  detailsTabNotes: HTMLButtonElement;
+  detailsTabLinks: HTMLButtonElement;
+  detailsTabPanelDetails: HTMLElement;
+  detailsTabPanelNotes: HTMLElement;
+  detailsTabPanelLinks: HTMLElement;
   selectedType: HTMLElement;
   deleteButton: HTMLButtonElement;
   titleInput: HTMLInputElement;

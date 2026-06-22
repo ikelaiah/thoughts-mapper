@@ -35,6 +35,9 @@ export type UiEventHandlers = {
   onLineEndpointChange: () => void;
   resetViewAndCloseMoreMenu: () => void;
   onTitleInput: () => void;
+  showDetailsTab: () => void;
+  showNotesTab: () => void;
+  showLinksTab: () => void;
   onKindChange: () => void;
   onKindColorChange: () => void;
   onKindDefaultClick: () => void;
@@ -116,6 +119,9 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.connectionTypeInput.addEventListener("change", handlers.onConnectionTypeChange);
   els.lineEndpointInput.addEventListener("change", handlers.onLineEndpointChange);
   els.resetButton.addEventListener("click", handlers.resetViewAndCloseMoreMenu);
+  els.detailsTabDetails.addEventListener("click", handlers.showDetailsTab);
+  els.detailsTabNotes.addEventListener("click", handlers.showNotesTab);
+  els.detailsTabLinks.addEventListener("click", handlers.showLinksTab);
   els.titleInput.addEventListener("input", handlers.onTitleInput);
   els.kindInput.addEventListener("change", handlers.onKindChange);
   els.kindColorInput.addEventListener("change", handlers.onKindColorChange);

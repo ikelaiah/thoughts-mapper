@@ -36,6 +36,7 @@ import type {
   CreateHandleDirection,
   CreateHandlePreview,
   CreateKindOptions,
+  DetailsTabId,
   GraphDepthStyle,
   GraphEffects,
   GraphTransitionOptions,
@@ -115,6 +116,7 @@ let moreMenuOpen = false;
 let inboxReviewOpen = false;
 let inboxReviewIndex = 0;
 let noteWorkspaceOpen = false;
+let activeDetailsTab: DetailsTabId = "details";
 const mobileLayoutQuery = window.matchMedia("(max-width: 720px)");
 let mobileLibraryOpen = false;
 let mobileDetailsOpen = false;
@@ -181,6 +183,12 @@ const els: AppElements = {
   detailsEmpty: qs("#detailsEmpty"),
   detailsCloseButton: qs("#detailsCloseButton"),
   detailsPanel: qs("#detailsPanel"),
+  detailsTabDetails: qs("#detailsTabDetails"),
+  detailsTabNotes: qs("#detailsTabNotes"),
+  detailsTabLinks: qs("#detailsTabLinks"),
+  detailsTabPanelDetails: qs("#detailsTabPanelDetails"),
+  detailsTabPanelNotes: qs("#detailsTabPanelNotes"),
+  detailsTabPanelLinks: qs("#detailsTabPanelLinks"),
   selectedType: qs("#selectedType"),
   deleteButton: qs("#deleteButton"),
   titleInput: qs("#titleInput"),
@@ -400,6 +408,9 @@ function bindEvents() {
       resetView();
       closeMoreMenu();
     },
+    showDetailsTab: () => setDetailsTab("details"),
+    showNotesTab: () => setDetailsTab("notes"),
+    showLinksTab: () => setDetailsTab("links"),
     onTitleInput: () => {
       const selected = getSelectedThought();
       if (!selected) return;
@@ -946,6 +957,7 @@ function renderDetails() {
   els.detailsEmpty.hidden = Boolean(selected);
   els.detailsPanel.hidden = !selected;
   els.stagePrompt.hidden = Boolean(selected);
+  renderDetailsTabs();
   if (!selected) return;
 
   const selectedKind = getKindDefinition(selected.kind);
@@ -1030,6 +1042,26 @@ function renderDetails() {
     }),
   );
   renderMentionPanels(selected);
+}
+
+function setDetailsTab(tab: DetailsTabId) {
+  activeDetailsTab = tab;
+  renderDetailsTabs();
+}
+
+function renderDetailsTabs() {
+  const tabs: { id: DetailsTabId; button: HTMLButtonElement; panel: HTMLElement }[] = [
+    { id: "details", button: els.detailsTabDetails, panel: els.detailsTabPanelDetails },
+    { id: "notes", button: els.detailsTabNotes, panel: els.detailsTabPanelNotes },
+    { id: "links", button: els.detailsTabLinks, panel: els.detailsTabPanelLinks },
+  ];
+  tabs.forEach(({ id, button, panel }) => {
+    const active = id === activeDetailsTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = 0;
+    panel.hidden = !active;
+  });
 }
 
 function updateSelectedNote(value: string, source: "compact" | "workspace", caretOffset?: number) {

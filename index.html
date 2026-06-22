@@ -137,93 +137,105 @@
             <button id="deleteButton" class="danger-button" type="button">Delete</button>
           </div>
 
-          <div class="thought-meta-row">
-            <label class="field compact-field">
-              <span>Type</span>
-              <div class="kind-control">
-                <select id="kindInput"></select>
-                <input id="kindColorInput" type="color" title="Type colour" aria-label="Type colour" />
-                <button id="kindDefaultButton" type="button" title="Use this kind by default">Default</button>
-              </div>
-            </label>
-            <label class="field compact-field">
-              <span>Tags</span>
-              <input id="tagInput" type="text" placeholder="research, project, later" />
-            </label>
+          <div class="details-tabs" role="tablist" aria-label="Thought sections">
+            <button id="detailsTabDetails" class="details-tab active" type="button" role="tab" aria-selected="true" aria-controls="detailsTabPanelDetails">Details</button>
+            <button id="detailsTabNotes" class="details-tab" type="button" role="tab" aria-selected="false" aria-controls="detailsTabPanelNotes">Notes</button>
+            <button id="detailsTabLinks" class="details-tab" type="button" role="tab" aria-selected="false" aria-controls="detailsTabPanelLinks">Links</button>
           </div>
-          <span id="selectedType" class="type-pill">Idea</span>
 
-          <section id="inboxPlacementPanel" class="inbox-placement" hidden>
-            <div>
-              <strong>Place inbox thought</strong>
-              <p id="placePreviewText">Choose where this thought belongs.</p>
-            </div>
-            <div class="place-form">
+          <div id="detailsTabPanelDetails" class="details-tab-panel details-overview-panel" role="tabpanel" aria-labelledby="detailsTabDetails">
+            <div class="thought-meta-row">
               <label class="field compact-field">
-                <span>Connect to</span>
-                <select id="placeTargetInput" aria-label="Place with thought"></select>
+                <span>Type</span>
+                <div class="kind-control">
+                  <select id="kindInput"></select>
+                  <input id="kindColorInput" type="color" title="Type colour" aria-label="Type colour" />
+                  <button id="kindDefaultButton" type="button" title="Use this kind by default">Default</button>
+                </div>
               </label>
               <label class="field compact-field">
-                <span>Connection</span>
-                <select id="placeRelationInput" aria-label="Placement relation">
-                  <option value="child-of">Place below</option>
-                  <option value="parent-of">Place above</option>
+                <span>Tags</span>
+                <input id="tagInput" type="text" placeholder="research, project, later" />
+              </label>
+            </div>
+            <span id="selectedType" class="type-pill">Idea</span>
+
+            <section id="inboxPlacementPanel" class="inbox-placement" hidden>
+              <div>
+                <strong>Place inbox thought</strong>
+                <p id="placePreviewText">Choose where this thought belongs.</p>
+              </div>
+              <div class="place-form">
+                <label class="field compact-field">
+                  <span>Connect to</span>
+                  <select id="placeTargetInput" aria-label="Place with thought"></select>
+                </label>
+                <label class="field compact-field">
+                  <span>Connection</span>
+                  <select id="placeRelationInput" aria-label="Placement relation">
+                    <option value="child-of">Place below</option>
+                    <option value="parent-of">Place above</option>
+                    <option value="related">Connect beside</option>
+                  </select>
+                </label>
+                <button id="placeThoughtButton" type="button">Place thought</button>
+              </div>
+            </section>
+          </div>
+
+          <div id="detailsTabPanelNotes" class="details-tab-panel details-notes-panel" role="tabpanel" aria-labelledby="detailsTabNotes" hidden>
+            <div class="field field-notes">
+              <div class="note-field-header">
+                <span>Notes</span>
+                <button id="openNoteWorkspaceButton" type="button">Open note</button>
+              </div>
+              <div
+                id="notePreview"
+                class="note-preview"
+                role="button"
+                tabindex="0"
+                aria-label="Notes preview. Activate to edit. Markdown supported."
+              ></div>
+              <textarea id="noteInput" rows="12" hidden></textarea>
+            </div>
+          </div>
+
+          <div id="detailsTabPanelLinks" class="details-tab-panel details-links-panel" role="tabpanel" aria-labelledby="detailsTabLinks" hidden>
+            <form id="linkForm" class="link-form">
+              <label class="field link-search-field">
+                <span>Connect to...</span>
+                <input id="linkTargetInput" list="linkTargetOptions" type="search" placeholder="Search thoughts" autocomplete="off" />
+                <datalist id="linkTargetOptions"></datalist>
+              </label>
+              <div class="link-inline-row">
+                <select id="linkRelationInput">
+                  <option value="parent-of">Add below</option>
+                  <option value="child-of">Place above</option>
                   <option value="related">Connect beside</option>
                 </select>
-              </label>
-              <button id="placeThoughtButton" type="button">Place thought</button>
+                <button id="linkSubmitButton" type="submit">Connect</button>
+              </div>
+              <p id="linkPreviewText" class="relationship-preview">Search for a thought to connect.</p>
+            </form>
+
+            <div class="section-heading">
+              <span>Connections</span>
+              <span id="connectionCount">0</span>
             </div>
-          </section>
+            <div id="connectionList" class="connection-list"></div>
 
-          <div class="field field-notes">
-            <div class="note-field-header">
-              <span>Notes</span>
-              <button id="openNoteWorkspaceButton" type="button">Open note</button>
+            <div class="section-heading">
+              <span>Mentioned by</span>
+              <span id="backlinkCount">0</span>
             </div>
-            <div
-              id="notePreview"
-              class="note-preview"
-              role="button"
-              tabindex="0"
-              aria-label="Notes preview. Activate to edit. Markdown supported."
-            ></div>
-            <textarea id="noteInput" rows="12" hidden></textarea>
-          </div>
+            <div id="backlinkList" class="connection-list"></div>
 
-          <form id="linkForm" class="link-form">
-            <label class="field link-search-field">
-              <span>Connect to...</span>
-              <input id="linkTargetInput" list="linkTargetOptions" type="search" placeholder="Search thoughts" autocomplete="off" />
-              <datalist id="linkTargetOptions"></datalist>
-            </label>
-            <div class="link-inline-row">
-              <select id="linkRelationInput">
-                <option value="parent-of">Add below</option>
-                <option value="child-of">Place above</option>
-                <option value="related">Connect beside</option>
-              </select>
-              <button id="linkSubmitButton" type="submit">Connect</button>
+            <div class="section-heading">
+              <span>Mentions</span>
+              <span id="mentionCount">0</span>
             </div>
-            <p id="linkPreviewText" class="relationship-preview">Search for a thought to connect.</p>
-          </form>
-
-          <div class="section-heading">
-            <span>Connections</span>
-            <span id="connectionCount">0</span>
+            <div id="mentionList" class="connection-list"></div>
           </div>
-          <div id="connectionList" class="connection-list"></div>
-
-          <div class="section-heading">
-            <span>Mentioned by</span>
-            <span id="backlinkCount">0</span>
-          </div>
-          <div id="backlinkList" class="connection-list"></div>
-
-          <div class="section-heading">
-            <span>Mentions</span>
-            <span id="mentionCount">0</span>
-          </div>
-          <div id="mentionList" class="connection-list"></div>
         </section>
       </aside>
 

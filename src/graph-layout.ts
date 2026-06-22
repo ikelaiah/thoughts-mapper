@@ -36,15 +36,15 @@ export function getNodeBox({
   getKindName: (id: string) => string;
 }): NodeBox {
   const isActive = id === selectedId;
-  const scale = mobile ? (isActive ? 1 : isConnected ? 0.9 : 0.82) : isActive ? 1.04 : isConnected ? 0.92 : 0.82;
+  const scale = mobile ? (isActive ? 1.04 : isConnected ? 0.94 : 0.86) : isActive ? 1.08 : isConnected ? 0.98 : 0.88;
   const baseWidth = getContentNodeWidth(thought, {
-    min: mobile ? (isActive ? 120 : isConnected ? 112 : 104) : isActive ? 132 : isConnected ? 118 : 108,
-    max: mobile ? (isActive ? 170 : isConnected ? 150 : 140) : isActive ? 180 : isConnected ? 180 : 160,
-    titleLimit: isActive ? 18 : 13,
+    min: mobile ? (isActive ? 146 : isConnected ? 126 : 114) : isActive ? 164 : isConnected ? 142 : 124,
+    max: mobile ? (isActive ? 210 : isConnected ? 184 : 160) : isActive ? 228 : isConnected ? 210 : 184,
+    titleLimit: isActive ? 24 : isConnected ? 18 : 15,
     isInboxThought,
     getKindName,
   });
-  const baseHeight = mobile ? (isActive ? 54 : isConnected ? 56 : 52) : isActive ? 58 : isConnected ? 58 : 54;
+  const baseHeight = mobile ? (isActive ? 62 : isConnected ? 58 : 54) : isActive ? 66 : isConnected ? 62 : 58;
   const hitBaseWidth = mobile ? Math.max(baseWidth + 28, 72 / scale) : baseWidth;
   const hitBaseHeight = mobile ? Math.max(baseHeight + 22, 56 / scale) : baseHeight;
   return {

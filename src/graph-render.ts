@@ -257,11 +257,12 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const nodeHitWidth = box.hitBaseWidth;
       const nodeHitHeight = box.hitBaseHeight;
       const showKindLabel = isActive || isConnected || isPreview || isPreviewRelated || state.view.scale >= 1.2;
-      const titleY = isMobileLayout() && showKindLabel ? -5 : showKindLabel ? -2 : 5;
-      const kindY = isMobileLayout() ? 14 : 16;
-      const nodeRadius = isActive ? 14 : 18;
-      const titleText = trimLabel(thought.title, isActive ? 18 : 13);
-      const ribbonWidth = isActive ? 6 : 5;
+      const titleY = isMobileLayout() && showKindLabel ? -6 : showKindLabel ? -3 : 5;
+      const kindY = isMobileLayout() ? 15 : 17;
+      const nodeRadius = isActive ? 15 : 16;
+      const titleLimit = isActive ? 24 : isConnected || isPreview || isPreviewRelated ? 18 : 15;
+      const titleText = trimLabel(thought.title, titleLimit);
+      const ribbonWidth = isActive ? 7 : 5;
       const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
       const ribbonX = -nodeWidth / 2 + 13;
       const showCreateHandles = !isDeleting && !isSoftDisconnected && (isActive || isPreview);
@@ -288,15 +289,13 @@ export function renderGraphView(ctx: GraphRenderContext): void {
         group.append(
           svg("rect", {
             class: "node-focus-halo",
-            x: -nodeWidth / 2 - 9,
-            y: -nodeHeight / 2 - 9,
-            width: nodeWidth + 18,
-            height: nodeHeight + 18,
-            rx: nodeRadius + 8,
-            ry: nodeRadius + 8,
+            x: -nodeWidth / 2 - 12,
+            y: -nodeHeight / 2 - 12,
+            width: nodeWidth + 24,
+            height: nodeHeight + 24,
+            rx: nodeRadius + 10,
+            ry: nodeRadius + 10,
           }),
-          svg("circle", { class: "node-orbit orbit-one", r: 58 }),
-          svg("circle", { class: "node-orbit orbit-two", r: 72 }),
         );
       }
 
@@ -344,10 +343,10 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       if (showCreateHandles) {
         const handleGap = NODE_CREATE_HANDLE_GAP;
         const handles = [
-          { direction: "top", relation: "child-of", x: 0, y: -nodeHeight / 2 - handleGap, label: "Add above" },
-          { direction: "right", relation: "related", x: nodeWidth / 2 + handleGap, y: 0, label: "Add beside" },
-          { direction: "bottom", relation: "parent-of", x: 0, y: nodeHeight / 2 + handleGap, label: "Add below" },
-          { direction: "left", relation: "related", x: -nodeWidth / 2 - handleGap, y: 0, label: "Add beside" },
+          { direction: "top", relation: "child-of", x: 0, y: -nodeHeight / 2 - handleGap, title: "Add above" },
+          { direction: "right", relation: "related", x: nodeWidth / 2 + handleGap, y: 0, title: "Add beside" },
+          { direction: "bottom", relation: "parent-of", x: 0, y: nodeHeight / 2 + handleGap, title: "Add below" },
+          { direction: "left", relation: "related", x: -nodeWidth / 2 - handleGap, y: 0, title: "Add beside" },
         ];
         const handleGroup = svg("g", { class: "node-create-handles" });
         handles.forEach((handle) => {
@@ -359,9 +358,14 @@ export function renderGraphView(ctx: GraphRenderContext): void {
             "data-relation": handle.relation,
           });
           handleElement.append(
-            svg("title", {}, handle.label),
-            svg("circle", { class: "node-handle-hit", r: 14 }),
-            svg("circle", { class: "node-handle-dot", r: 5.8 }),
+            svg("title", {}, handle.title),
+            svg("circle", {
+              class: "node-handle-hit",
+              r: 14,
+            }),
+            svg("circle", { class: "node-handle-button", r: 8.5 }),
+            svg("line", { class: "node-handle-plus-line", x1: -3.6, y1: 0, x2: 3.6, y2: 0 }),
+            svg("line", { class: "node-handle-plus-line", x1: 0, y1: -3.6, x2: 0, y2: 3.6 }),
           );
           handleGroup.append(handleElement);
         });

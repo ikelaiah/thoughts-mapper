@@ -10,7 +10,7 @@
 
 **A calm, visual second brain for people who want connections without complexity.**
 
-Thoughts Mapper is a free, local-first visual thinking app inspired by associative knowledge tools. It helps you capture thoughts, connect them, and move through your ideas without turning your personal knowledge base into a busy database.
+Thoughts Mapper is a private, local-first thinking inbox that helps you place ideas deliberately, review loose thoughts, and navigate knowledge one focused neighborhood at a time.
 
 ## 🚀 Quick Start
 

@@ -78,6 +78,26 @@ The visual graph keeps the selected thought central. Thoughts that frame it sit 
 - Switch between multiple projects
 - Start from focused templates for project tracking, meetings, personal CRM, learning, software architecture, and helpdesk knowledge bases
 
+## Walk and Presentation Order
+
+Walk and Presentation use the same traversal order:
+
+1. If you start with a placed thought selected, that thought becomes the starting point.
+2. The app walks through that thought's children depth-first.
+3. Children at the same level are sorted alphabetically by title.
+4. After the starting subtree, the walk continues through the map's root thoughts.
+5. Root thoughts are also sorted alphabetically by title.
+6. Any remaining placed thoughts that were not reached are appended alphabetically.
+7. Inbox thoughts are only used when there are no placed graph thoughts.
+
+In short:
+
+`selected start, then its children recursively, then map roots recursively, then leftovers`
+
+Related or beside links do not define the main traversal order. They appear as context controls in Walk mode.
+
+Custom presentation sequences are not currently supported. A future presentation-order list could allow thoughts to be pinned and reordered manually for a talk.
+
 ## 🎨 Calm Visual Controls
 
 The UI is designed to make the graph feel stable instead of jumpy:

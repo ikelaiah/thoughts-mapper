@@ -131,8 +131,23 @@ Thoughts Mapper runs locally in your browser. There is no sync backend, account 
 
 - `index.html` — app markup and controls
 - `styles.css` — visual design, layout, themes, and animations
-- `src/main.ts` — state, persistence, graph rendering, interactions, notes, import/export, and type management
+- `src/main.ts` — application orchestration, state changes, and feature workflows
+- `src/ui-elements.ts` — the typed selector registry shared by UI features
+- `src/ui-events.ts` — event binding separated from feature behavior
+- `src/graph-queries.ts` — read-only relationship traversal and inbox/graph queries
+- `src/graph-layout.ts` and `src/graph-render.ts` — graph geometry and SVG rendering
+- `src/app-data.ts` — persisted-data validation, defaults, and migration-safe cleanup
+- `src/interoperability.ts` — Markdown, OPML, and JSON Canvas conversion
+- `tests/` — unit tests for data, graph, rendering, Markdown, and import/export behavior
 - `package.json`, `tsconfig.json`, `vite.config.ts` — TypeScript and Vite tooling
+
+### Working on the code
+
+- Keep `main.ts` focused on coordinating state changes and UI workflows. Put reusable, read-only calculations in a small module with unit tests.
+- Treat hierarchical links as `parent -> child`. Related links are undirected even though storage still uses `from` and `to`.
+- Inbox membership is derived from having no links; do not add a second persisted inbox flag.
+- Add or rename required controls in `index.html`, `AppElements` in `src/types.ts`, and the selector registry in `src/ui-elements.ts` together.
+- Run `npm run typecheck`, `npm test`, and `npm run build` before merging.
 
 ## 🧩 Good Next Features
 

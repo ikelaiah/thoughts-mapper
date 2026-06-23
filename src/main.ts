@@ -8,6 +8,7 @@ import {
   resolveThoughtOverlaps,
 } from "./graph-layout";
 import { createProject, sanitizeAppData, sanitizeState } from "./app-data";
+import { createGraphQueries, uniqueThoughts } from "./graph-queries";
 import { renderGraphView } from "./graph-render";
 import {
   jsonCanvasToState,
@@ -37,13 +38,13 @@ import {
   templateCatalog,
 } from "./constants";
 import { loadIndexedState, loadLocalState, openDatabase, persistIndexedState, persistLocalState } from "./storage";
+import { collectAppElements } from "./ui-elements";
 import { bindUiEvents } from "./ui-events";
 import { clamp, clone, makeId } from "./utils";
 import type {
   AddKindOptions,
   AddThoughtOptions,
   AppData,
-  AppElements,
   CenterOptions,
   CreateHandleDirection,
   CreateHandlePreview,
@@ -95,6 +96,22 @@ function setToolbarIcon(button: HTMLButtonElement, icon: ToolbarIconId, label: s
 }
 
 let state: ProjectState = clone(seedState);
+const {
+  getAncestorEntries,
+  getChildThoughts,
+  getConnectedThoughts,
+  getConnections,
+  getDescendantEntries,
+  getGraphThoughts,
+  getInboxThoughts,
+  getParentThoughts,
+  getRelatedThoughts,
+  getSiblingThoughts,
+  getThought,
+  getThoughtByTitle,
+  hasLinkBetween,
+  isInboxThought,
+} = createGraphQueries(() => state);
 let appData: AppData | null = null;
 let db: IDBDatabase | null = null;
 let storageMode = "indexeddb";
@@ -194,186 +211,7 @@ let wasMobileLayout: boolean | null = null;
 let projectControlsHome: Comment | null = null;
 let sidebarActionsHome: Comment | null = null;
 
-const els: AppElements = {
-  appShell: qs("#appShell"),
-  leftResizeHandle: qs("#leftResizeHandle"),
-  rightResizeHandle: qs("#rightResizeHandle"),
-  saveState: qs("#saveState"),
-  libraryCloseButton: qs("#libraryCloseButton"),
-  projectControls: qs("#projectControls"),
-  projectSelect: qs("#projectSelect"),
-  projectNameInput: qs("#projectNameInput"),
-  newProjectToggleButton: qs("#newProjectToggleButton"),
-  newProjectPanel: qs("#newProjectPanel"),
-  templateSelect: qs("#templateSelect"),
-  newProjectNameInput: qs("#newProjectNameInput"),
-  createTemplateButton: qs("#createTemplateButton"),
-  searchInput: qs("#searchInput"),
-  quickCaptureForm: qs("#quickCaptureForm"),
-  quickCaptureInput: qs("#quickCaptureInput"),
-  tagFilterInput: qs("#tagFilterInput"),
-  inboxFilterButton: qs("#inboxFilterButton"),
-  reviewButton: qs("#reviewButton"),
-  inboxCount: qs("#inboxCount"),
-  thoughtCount: qs("#thoughtCount"),
-  thoughtList: qs("#thoughtList"),
-  sidebarActions: qs(".sidebar-actions"),
-  exportButton: qs("#exportButton"),
-  markdownExportButton: qs("#markdownExportButton"),
-  markdownFolderExportButton: qs("#markdownFolderExportButton"),
-  opmlExportButton: qs("#opmlExportButton"),
-  jsonCanvasExportButton: qs("#jsonCanvasExportButton"),
-  svgExportButton: qs("#svgExportButton"),
-  pngExportButton: qs("#pngExportButton"),
-  snapshotButton: qs("#snapshotButton"),
-  importInput: qs("#importInput"),
-  markdownImportInput: qs("#markdownImportInput"),
-  opmlImportInput: qs("#opmlImportInput"),
-  jsonCanvasImportInput: qs("#jsonCanvasImportInput"),
-  sidebarToggleButton: qs("#sidebarToggleButton"),
-  detailsToggleButton: qs("#detailsToggleButton"),
-  moreButton: qs("#moreButton"),
-  moreMenu: qs("#moreMenu"),
-  undoButton: qs("#undoButton"),
-  redoButton: qs("#redoButton"),
-  fitButton: qs("#fitButton"),
-  centerButton: qs("#centerButton"),
-  resetButton: qs("#resetButton"),
-  settingsButton: qs("#settingsButton"),
-  settingsMenuButton: qs("#settingsMenuButton"),
-  mapStage: qs(".map-stage"),
-  stagePrompt: qs("#stagePrompt"),
-  mapViewButton: qs("#mapViewButton"),
-  outlineViewButton: qs("#outlineViewButton"),
-  walkViewButton: qs("#walkViewButton"),
-  presentationButton: qs("#presentationButton"),
-  outlineView: qs("#outlineView"),
-  outlineTitle: qs("#outlineTitle"),
-  outlineSummary: qs("#outlineSummary"),
-  outlineTree: qs("#outlineTree"),
-  walkView: qs("#walkView"),
-  walkTitle: qs("#walkTitle"),
-  walkMeta: qs("#walkMeta"),
-  walkNote: qs("#walkNote"),
-  walkContext: qs("#walkContext"),
-  walkProgress: qs("#walkProgress"),
-  walkPrevButton: qs("#walkPrevButton"),
-  walkNextButton: qs("#walkNextButton"),
-  walkMapButton: qs("#walkMapButton"),
-  settingsPage: qs("#settingsPage"),
-  settingsCloseButton: qs("#settingsCloseButton"),
-  mobileManagement: qs("#mobileManagement"),
-  colourSchemeInput: qs("#colourSchemeInput"),
-  calmModeInput: qs("#calmModeInput"),
-  lineThicknessInput: qs("#lineThicknessInput"),
-  lineThicknessValue: qs("#lineThicknessValue"),
-  connectionTypeInput: qs("#connectionTypeInput"),
-  lineEndpointInput: qs("#lineEndpointInput"),
-  kindList: qs("#kindList"),
-  newKindNameInput: qs("#newKindNameInput"),
-  newKindColorInput: qs("#newKindColorInput"),
-  addKindButton: qs("#addKindButton"),
-  graph: qs("#graph"),
-  graphBackground: qs("#graphBackground"),
-  viewport: qs("#viewport"),
-  linksLayer: qs("#linksLayer"),
-  nodesLayer: qs("#nodesLayer"),
-  detailsEmpty: qs("#detailsEmpty"),
-  detailsCloseButton: qs("#detailsCloseButton"),
-  detailsPanel: qs("#detailsPanel"),
-  detailsTabDetails: qs("#detailsTabDetails"),
-  detailsTabNotes: qs("#detailsTabNotes"),
-  detailsTabLinks: qs("#detailsTabLinks"),
-  detailsTabSources: qs("#detailsTabSources"),
-  detailsTabPanelDetails: qs("#detailsTabPanelDetails"),
-  detailsTabPanelNotes: qs("#detailsTabPanelNotes"),
-  detailsTabPanelLinks: qs("#detailsTabPanelLinks"),
-  detailsTabPanelSources: qs("#detailsTabPanelSources"),
-  selectedType: qs("#selectedType"),
-  deleteButton: qs("#deleteButton"),
-  titleInput: qs("#titleInput"),
-  kindInput: qs("#kindInput"),
-  kindDefaultButton: qs("#kindDefaultButton"),
-  tagInput: qs("#tagInput"),
-  inboxPlacementPanel: qs("#inboxPlacementPanel"),
-  placeTargetInput: qs("#placeTargetInput"),
-  placeRelationInput: qs("#placeRelationInput"),
-  placeThoughtButton: qs("#placeThoughtButton"),
-  placePreviewText: qs("#placePreviewText"),
-  openNoteWorkspaceButton: qs("#openNoteWorkspaceButton"),
-  noteInput: qs("#noteInput"),
-  notePreview: qs("#notePreview"),
-  noteWorkspace: qs("#noteWorkspace"),
-  noteWorkspaceTitle: qs("#noteWorkspaceTitle"),
-  noteWorkspaceInput: qs("#noteWorkspaceInput"),
-  closeNoteWorkspaceButton: qs("#closeNoteWorkspaceButton"),
-  linkForm: qs("#linkForm"),
-  linkTargetInput: qs("#linkTargetInput"),
-  linkTargetOptions: qs("#linkTargetOptions"),
-  linkRelationInput: qs("#linkRelationInput"),
-  linkSubmitButton: qs("#linkSubmitButton"),
-  linkPreviewText: qs("#linkPreviewText"),
-  connectedThoughtForm: qs("#connectedThoughtForm"),
-  connectedThoughtTitleInput: qs("#connectedThoughtTitleInput"),
-  connectedThoughtRelationInput: qs("#connectedThoughtRelationInput"),
-  connectedThoughtSubmitButton: qs("#connectedThoughtSubmitButton"),
-  connectionCount: qs("#connectionCount"),
-  connectionList: qs("#connectionList"),
-  backlinkCount: qs("#backlinkCount"),
-  backlinkList: qs("#backlinkList"),
-  mentionCount: qs("#mentionCount"),
-  mentionList: qs("#mentionList"),
-  attachmentForm: qs("#attachmentForm"),
-  attachmentKindInput: qs("#attachmentKindInput"),
-  attachmentTitleInput: qs("#attachmentTitleInput"),
-  attachmentRefInput: qs("#attachmentRefInput"),
-  attachmentList: qs("#attachmentList"),
-  inboxReviewPanel: qs("#inboxReviewPanel"),
-  reviewModeInput: qs("#reviewModeInput"),
-  inboxReviewProgress: qs("#inboxReviewProgress"),
-  inboxReviewCloseButton: qs("#inboxReviewCloseButton"),
-  inboxReviewPrevButton: qs("#inboxReviewPrevButton"),
-  inboxReviewNextButton: qs("#inboxReviewNextButton"),
-  inboxReviewTitle: qs("#inboxReviewTitle"),
-  inboxReviewNote: qs("#inboxReviewNote"),
-  inboxReviewTargetInput: qs("#inboxReviewTargetInput"),
-  inboxReviewPreview: qs("#inboxReviewPreview"),
-  inboxReviewChildButton: qs("#inboxReviewChildButton"),
-  inboxReviewParentButton: qs("#inboxReviewParentButton"),
-  inboxReviewRelatedButton: qs("#inboxReviewRelatedButton"),
-  inboxReviewKeepButton: qs("#inboxReviewKeepButton"),
-  reviewOpenNoteButton: qs("#reviewOpenNoteButton"),
-  reviewFixButton: qs("#reviewFixButton"),
-  commandPalette: qs("#commandPalette"),
-  commandPaletteInput: qs("#commandPaletteInput"),
-  commandPaletteList: qs("#commandPaletteList"),
-  commandPaletteHint: qs("#commandPaletteHint"),
-  commandPaletteCloseButton: qs("#commandPaletteCloseButton"),
-  snapshotPanel: qs("#snapshotPanel"),
-  snapshotNameInput: qs("#snapshotNameInput"),
-  createSnapshotButton: qs("#createSnapshotButton"),
-  snapshotList: qs("#snapshotList"),
-  snapshotCloseButton: qs("#snapshotCloseButton"),
-  contextMenu: qs("#contextMenu"),
-  nodeCreateForm: qs("#nodeCreateForm"),
-  nodeCreateInput: qs("#nodeCreateInput"),
-  nodeCreateNoteInput: qs("#nodeCreateNoteInput"),
-  nodeCreateRelationInput: qs("#nodeCreateRelationInput"),
-  nodeCreateCancelButton: qs("#nodeCreateCancelButton"),
-  linkEditForm: qs("#linkEditForm"),
-  linkNameInput: qs("#linkNameInput"),
-  linkDirectionInput: qs("#linkDirectionInput"),
-  linkUnlinkButton: qs("#linkUnlinkButton"),
-  linkKeepInput: qs("#linkKeepInput"),
-  linkRetargetInput: qs("#linkRetargetInput"),
-  linkRetargetRelationInput: qs("#linkRetargetRelationInput"),
-  linkRetargetButton: qs("#linkRetargetButton"),
-  mobileScrim: qs("#mobileScrim"),
-  mobileCaptureButton: qs("#mobileCaptureButton"),
-  mobileCaptureForm: qs("#mobileCaptureForm"),
-  mobileCaptureInput: qs("#mobileCaptureInput"),
-  mobileCaptureCancelButton: qs("#mobileCaptureCancelButton"),
-};
+const els = collectAppElements();
 
 init();
 
@@ -2757,87 +2595,6 @@ function getConnectionRoleLabel(role) {
   return role === "parent" ? "Above" : "Below";
 }
 
-function getParentThoughts(id) {
-  return state.links
-    .filter((link) => link.type !== "related" && link.to === id)
-    .map((link) => getThought(link.from))
-    .filter(Boolean);
-}
-
-function getChildThoughts(id) {
-  return state.links
-    .filter((link) => link.type !== "related" && link.from === id)
-    .map((link) => getThought(link.to))
-    .filter(Boolean);
-}
-
-function getRelatedThoughts(id) {
-  return state.links
-    .filter((link) => link.type === "related" && (link.from === id || link.to === id))
-    .map((link) => getThought(link.from === id ? link.to : link.from))
-    .filter(Boolean);
-}
-
-function getAncestorEntries(id, maxDepth = 2) {
-  const entries = [];
-  const visited = new Set([id]);
-  let frontier = [{ id, depth: 0 }];
-
-  while (frontier.length) {
-    const next = [];
-    frontier.forEach((item) => {
-      if (item.depth >= maxDepth) return;
-      state.links
-        .filter((link) => link.type !== "related" && link.to === item.id)
-        .forEach((link) => {
-          const thought = getThought(link.from);
-          if (!thought || visited.has(thought.id)) return;
-          visited.add(thought.id);
-          entries.push({ thought, depth: item.depth + 1, childId: item.id });
-          next.push({ id: thought.id, depth: item.depth + 1 });
-        });
-    });
-    frontier = next;
-  }
-
-  return entries;
-}
-
-function getDescendantEntries(id, maxDepth = 3) {
-  const entries = [];
-  const visited = new Set([id]);
-  let frontier = [{ id, depth: 0 }];
-
-  while (frontier.length) {
-    const next = [];
-    frontier.forEach((item) => {
-      if (item.depth >= maxDepth) return;
-      state.links
-        .filter((link) => link.type !== "related" && link.from === item.id)
-        .forEach((link) => {
-          const thought = getThought(link.to);
-          if (!thought || visited.has(thought.id)) return;
-          visited.add(thought.id);
-          entries.push({ thought, depth: item.depth + 1, parentId: item.id });
-          next.push({ id: thought.id, depth: item.depth + 1 });
-        });
-    });
-    frontier = next;
-  }
-
-  return entries;
-}
-
-function getSiblingThoughts(id) {
-  const siblingIds = new Set();
-  getParentThoughts(id).forEach((parent) => {
-    getChildThoughts(parent.id).forEach((child) => {
-      if (child.id !== id) siblingIds.add(child.id);
-    });
-  });
-  return [...siblingIds].map(getThought).filter(Boolean);
-}
-
 function getParentRelatedContextEntries(id, directIds = new Set(getDirectFocusFamilyIds(id))) {
   const entries = [];
   const seen = new Set();
@@ -2940,49 +2697,8 @@ function getPreviewFamilyIds(id) {
     .map((thought) => thought.id);
 }
 
-function uniqueThoughts(thoughts) {
-  const seen = new Set();
-  return thoughts.filter((thought) => {
-    if (!thought || seen.has(thought.id)) return false;
-    seen.add(thought.id);
-    return true;
-  });
-}
-
 function isCalmMode() {
   return state.settings.calmMode;
-}
-
-function getConnections(id) {
-  if (!id) return [];
-  return state.links
-    .filter((link) => link.from === id || link.to === id)
-    .map((link) => {
-      if (link.type === "related") {
-        return {
-          linkId: link.id,
-          linkName: link.name || "",
-          thought: getThought(link.from === id ? link.to : link.from),
-          role: "related",
-        };
-      }
-      const isParent = link.to === id;
-      return {
-        linkId: link.id,
-        linkName: link.name || "",
-        thought: getThought(isParent ? link.from : link.to),
-        role: isParent ? "parent" : "child",
-      };
-    })
-    .filter((connection) => connection.thought);
-}
-
-function getConnectedThoughts(id) {
-  return getConnections(id).map((connection) => connection.thought);
-}
-
-function getGraphThoughts() {
-  return state.thoughts.filter((thought) => !isInboxThought(thought.id));
 }
 
 function getGraphRenderThought(id) {
@@ -2999,14 +2715,6 @@ function getGraphRenderThoughts() {
 
 function getGraphFocusId() {
   return state.selectedId && !isInboxThought(state.selectedId) ? state.selectedId : null;
-}
-
-function getInboxThoughts() {
-  return state.thoughts.filter((thought) => isInboxThought(thought.id));
-}
-
-function isInboxThought(id) {
-  return !state.links.some((link) => link.from === id || link.to === id);
 }
 
 function getKindDefinition(id) {
@@ -3954,15 +3662,6 @@ function getMentionTitles(text) {
   return [...String(text || "").matchAll(/\[\[([^\]]{1,80})\]\]/g)]
     .map((match) => match[1].trim())
     .filter(Boolean);
-}
-
-function getThoughtByTitle(title) {
-  const normalized = String(title || "").trim().toLowerCase();
-  return state.thoughts.find((thought) => thought.title.toLowerCase() === normalized);
-}
-
-function hasLinkBetween(a, b) {
-  return state.links.some((link) => (link.from === a && link.to === b) || (link.from === b && link.to === a));
 }
 
 function pushHistory() {
@@ -5006,10 +4705,6 @@ async function readTextFiles(files: File[]): Promise<TextFile[]> {
   })));
 }
 
-function getThought(id) {
-  return state.thoughts.find((thought) => thought.id === id);
-}
-
 function getLink(id) {
   return state.links.find((link) => link.id === id);
 }
@@ -5031,12 +4726,6 @@ function isDuplicateLink(nextLink, ignoreId = null) {
 
 function getSelectedThought() {
   return getThought(state.selectedId);
-}
-
-function qs<T extends Element = HTMLElement>(selector: string): T {
-  const element = document.querySelector(selector);
-  if (!element) throw new Error(`Missing element: ${selector}`);
-  return element as T;
 }
 
 function getClosestElement(target: EventTarget | null, selector: string): HTMLElement | null {

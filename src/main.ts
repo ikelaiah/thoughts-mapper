@@ -74,6 +74,25 @@ import type {
   ThoughtRenderEffect,
   ViewState,
 } from "./types";
+
+type ToolbarIconId = "menu" | "details" | "present" | "exit" | "fit" | "settings" | "more";
+
+const toolbarIcons: Record<ToolbarIconId, string> = {
+  menu: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16"/></svg>',
+  details: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 11v5"/><circle class="toolbar-icon-dot" cx="12" cy="8" r="1"/></svg>',
+  present: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M12 16v4M8 20h8"/></svg>',
+  exit: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="2"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  fit: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4H4v4M16 4h4v4M20 16v4h-4M4 16v4h4"/><path d="M9 12h6M12 9v6"/></svg>',
+  settings: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M4.2 7.5l2.6 1.5M17.2 15l2.6 1.5M19.8 7.5 17.2 9M6.8 15l-2.6 1.5"/></svg>',
+  more: '<svg class="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="toolbar-icon-dot" cx="6" cy="12" r="1.6"/><circle class="toolbar-icon-dot" cx="12" cy="12" r="1.6"/><circle class="toolbar-icon-dot" cx="18" cy="12" r="1.6"/></svg>',
+};
+
+function setToolbarIcon(button: HTMLButtonElement, icon: ToolbarIconId, label: string): void {
+  button.innerHTML = `${toolbarIcons[icon]}<span class="toolbar-label">${label}</span>`;
+  button.title = label;
+  button.setAttribute("aria-label", label);
+}
+
 let state: ProjectState = clone(seedState);
 let appData: AppData | null = null;
 let db: IDBDatabase | null = null;
@@ -100,6 +119,7 @@ type CommandPaletteItem = {
 };
 type PresentationSnapshot = {
   stageView: StageViewId;
+  walkStartId: string | null;
   sidebarHidden: boolean;
   detailsHidden: boolean;
   mobileLibraryOpen: boolean;
@@ -134,10 +154,10 @@ const graphEffects: GraphEffects = {
 };
 const CALM_DEPTH_STYLES: GraphDepthStyle[] = [
   { level: 1, scale: 1, opacity: 1 },
-  { level: 2, scale: 0.9, opacity: 0.4 },
-  { level: 3, scale: 0.8, opacity: 0.5 },
-  { level: 4, scale: 0.7, opacity: 0.6 },
-  { level: 5, scale: 0.6, opacity: 0.7 },
+  { level: 2, scale: 0.9, opacity: 0.68 },
+  { level: 3, scale: 0.8, opacity: 0.58 },
+  { level: 4, scale: 0.7, opacity: 0.5 },
+  { level: 5, scale: 0.6, opacity: 0.44 },
 ];
 let contextAnchorId: string | null = null;
 let pendingNodeCreatePosition: Point | null = null;
@@ -158,6 +178,7 @@ let reviewMode: ReviewModeId = "unplaced";
 let noteWorkspaceOpen = false;
 let activeDetailsTab: DetailsTabId = "details";
 let stageView: StageViewId = "map";
+let walkStartId: string | null = null;
 let presentationMode = false;
 let presentationSnapshot: PresentationSnapshot | null = null;
 let commandPaletteOpen = false;
@@ -1001,6 +1022,7 @@ function resetProjectSessionState() {
   redoStack = [];
   showInboxOnly = false;
   focusPositions = null;
+  walkStartId = null;
   hoverThoughtId = null;
   contextAnchorId = null;
   contextLinkId = null;
@@ -1215,8 +1237,28 @@ function renderDetails() {
   renderAttachmentPanel(selected);
 }
 
+function ensureWalkStart() {
+  const graphIds = new Set(getGraphThoughts().map((thought) => thought.id));
+  if (walkStartId && graphIds.has(walkStartId)) return;
+  walkStartId = getPreferredWalkStartId();
+}
+
+function getPreferredWalkStartId(): string | null {
+  const selected = state.selectedId ? getThought(state.selectedId) : null;
+  return selected && !isInboxThought(selected.id) ? selected.id : null;
+}
+
 function setStageView(view: StageViewId) {
-  if (stageView === view) return;
+  if (stageView === view) {
+    if (view === "walk") {
+      ensureWalkStart();
+      renderWalk();
+    }
+    return;
+  }
+  const leavingWalk = stageView === "walk" && view !== "walk";
+  if (view === "walk") ensureWalkStart();
+  if (leavingWalk && !presentationMode) walkStartId = null;
   stageView = view;
   renderStageView();
   if (view === "outline") {
@@ -1460,10 +1502,8 @@ function renderWalk() {
 function getWalkPath(): Thought[] {
   const graphThoughts = getGraphThoughts();
   if (!graphThoughts.length) return getInboxThoughts().slice().sort(compareThoughtsByTitle);
-  const selected = state.selectedId ? getThought(state.selectedId) : null;
-  const start = selected && !isInboxThought(selected.id)
-    ? selected
-    : getOutlineRoots(graphThoughts.slice().sort(compareThoughtsByTitle))[0] || graphThoughts[0];
+  const orderedGraphThoughts = graphThoughts.slice().sort(compareThoughtsByTitle);
+  const start = walkStartId ? getThought(walkStartId) : null;
   const path: Thought[] = [];
   const visited = new Set<string>();
   const walk = (thought: Thought) => {
@@ -1475,12 +1515,21 @@ function getWalkPath(): Thought[] {
       .sort(compareThoughtsByTitle)
       .forEach(walk);
   };
-  walk(start);
-  graphThoughts
-    .slice()
-    .sort(compareThoughtsByTitle)
-    .forEach(walk);
+  if (start && !isInboxThought(start.id)) walk(start);
+  getWalkRoots(orderedGraphThoughts).forEach(walk);
+  orderedGraphThoughts.forEach(walk);
   return path;
+}
+
+function getWalkRoots(graphThoughts: Thought[]): Thought[] {
+  const graphIds = new Set(graphThoughts.map((thought) => thought.id));
+  const childIds = new Set(
+    state.links
+      .filter((link) => link.type !== "related" && graphIds.has(link.from) && graphIds.has(link.to))
+      .map((link) => link.to),
+  );
+  const roots = graphThoughts.filter((thought) => !childIds.has(thought.id));
+  return roots.length ? roots : graphThoughts.slice(0, 1);
 }
 
 function createWalkContextButtons(active: Thought): HTMLElement[] {
@@ -1546,6 +1595,7 @@ function enterPresentationMode() {
   if (presentationMode) return;
   presentationSnapshot = {
     stageView,
+    walkStartId,
     sidebarHidden,
     detailsHidden,
     mobileLibraryOpen,
@@ -1567,6 +1617,7 @@ function enterPresentationMode() {
   closeInboxReview();
   closeMobilePanels();
   closeMobileCapture();
+  walkStartId = getPreferredWalkStartId();
   setStageView("walk");
   renderPanelState();
   renderWalk();
@@ -1583,6 +1634,7 @@ function exitPresentationMode(options: { exitFullscreen?: boolean } = {}) {
   presentationMode = false;
   presentationSnapshot = null;
   if (snapshot) {
+    walkStartId = snapshot.walkStartId;
     sidebarHidden = snapshot.sidebarHidden;
     detailsHidden = snapshot.detailsHidden;
     mobileLibraryOpen = snapshot.mobileLibraryOpen;
@@ -4149,33 +4201,19 @@ function renderPanelState() {
   els.appShell.classList.toggle("mobile-details-open", mobile && mobileDetailsOpen);
   els.mobileScrim.hidden = !(mobile && (mobileLibraryOpen || mobileDetailsOpen));
 
-  if (mobile) {
-    els.sidebarToggleButton.textContent = "☰";
-    els.sidebarToggleButton.title = mobileLibraryOpen ? "Close library" : "Open library";
-    els.detailsToggleButton.textContent = "i";
-    els.detailsToggleButton.title = mobileDetailsOpen ? "Close thought details" : "Open thought details";
-    els.fitButton.textContent = "⛶";
-    els.moreButton.textContent = "...";
-  } else {
-    els.sidebarToggleButton.textContent = "☰";
-    els.sidebarToggleButton.title = sidebarHidden ? "Show thoughts sidebar" : "Hide thoughts sidebar";
-    els.detailsToggleButton.textContent = "i";
-    els.detailsToggleButton.title = detailsHidden ? "Show thought details" : "Hide thought details";
-    els.fitButton.textContent = "Fit";
-    els.settingsButton.textContent = "Settings";
-    els.moreButton.textContent = "...";
-  }
-
-  els.sidebarToggleButton.setAttribute("aria-label", els.sidebarToggleButton.title);
+  setToolbarIcon(els.sidebarToggleButton, "menu", mobile
+    ? mobileLibraryOpen ? "Close library" : "Open library"
+    : sidebarHidden ? "Show thoughts sidebar" : "Hide thoughts sidebar");
   els.sidebarToggleButton.setAttribute("aria-expanded", String(mobile ? mobileLibraryOpen : !sidebarHidden));
-  els.detailsToggleButton.setAttribute("aria-label", els.detailsToggleButton.title);
+  setToolbarIcon(els.detailsToggleButton, "details", mobile
+    ? mobileDetailsOpen ? "Close thought details" : "Open thought details"
+    : detailsHidden ? "Show thought details" : "Hide thought details");
   els.detailsToggleButton.setAttribute("aria-expanded", String(mobile ? mobileDetailsOpen : !detailsHidden));
-  els.presentationButton.textContent = presentationMode ? "Exit" : "Present";
-  els.presentationButton.title = presentationMode ? "Exit presentation mode" : "Start presentation mode";
-  els.presentationButton.setAttribute("aria-label", els.presentationButton.title);
+  setToolbarIcon(els.presentationButton, presentationMode ? "exit" : "present", presentationMode ? "Exit presentation mode" : "Start presentation mode");
   els.presentationButton.setAttribute("aria-pressed", String(presentationMode));
-  els.fitButton.setAttribute("aria-label", "Fit map");
-  els.moreButton.setAttribute("aria-label", "More map tools");
+  setToolbarIcon(els.fitButton, "fit", els.fitButton.title || "Fit map");
+  setToolbarIcon(els.settingsButton, "settings", "Open settings");
+  setToolbarIcon(els.moreButton, "more", "More map tools");
   renderMobileCapture();
   renderStageView();
 }

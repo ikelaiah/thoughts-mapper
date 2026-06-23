@@ -249,6 +249,15 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
       const isDeleting = thoughtEffect?.mode === "deleting";
       const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id) && !isDeleting;
+      const depthClass = isActive
+        ? " focus-node"
+        : isConnected || isPreview
+          ? " near-node"
+          : isSecondaryFocus || isPreviewRelated
+            ? " mid-node"
+            : isDimmed
+              ? " far-node"
+              : "";
       const box = getGraphRenderNodeBox(thought.id);
       const depthStyle = getNodeDepthStyle(thought.id);
       const scale = box.scale * (depthStyle?.scale ?? 1);
@@ -262,6 +271,8 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const nodeRadius = isActive ? 15 : 16;
       const titleLimit = isActive ? 24 : isConnected || isPreview || isPreviewRelated ? 18 : 15;
       const titleText = trimLabel(thought.title, titleLimit);
+      const kindText = isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind);
+      const kindChipWidth = Math.max(42, Math.min(nodeWidth - 32, kindText.length * 6.4 + 18));
       const ribbonWidth = isActive ? 7 : 5;
       const ribbonHeight = Math.max(nodeHeight - (isActive ? 22 : 20), 26);
       const ribbonX = -nodeWidth / 2 + 13;
@@ -276,14 +287,14 @@ export function renderGraphView(ctx: GraphRenderContext): void {
               ? 0.36
               : 1;
       const group = svg("g", {
-        class: `node${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
+        class: `node${depthClass}${isActive ? " active" : ""}${isConnected ? " connected" : ""}${isSecondaryFocus ? " secondary-focus" : ""}${isDimmed ? " dimmed" : ""}${isSoftDisconnected ? " soft-disconnected" : ""}${isDeleting ? " deleting" : ""}${
           isPreview ? " preview" : ""
         }${isPreviewRelated ? " preview-related" : ""}`,
         transform: `translate(${position.x} ${position.y}) scale(${scale})`,
         "data-id": thought.id,
         opacity: nodeOpacity,
       });
-      group.append(svg("title", {}, `${thought.title} · ${isInboxThought(thought.id) ? "Inbox" : getKindName(thought.kind)}`));
+      group.append(svg("title", {}, `${thought.title} · ${kindText}`));
 
       if (isActive) {
         group.append(
@@ -323,6 +334,17 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       );
       group.append(
         svg("rect", {
+          class: "node-sheen",
+          x: -nodeWidth / 2 + 3,
+          y: -nodeHeight / 2 + 3,
+          width: nodeWidth - 6,
+          height: Math.max(22, nodeHeight * 0.46),
+          rx: Math.max(8, nodeRadius - 3),
+          ry: Math.max(8, nodeRadius - 3),
+        }),
+      );
+      group.append(
+        svg("rect", {
           class: "node-ribbon",
           x: ribbonX,
           y: -ribbonHeight / 2,
@@ -337,7 +359,18 @@ export function renderGraphView(ctx: GraphRenderContext): void {
         svg("text", { class: "node-title", y: titleY }, titleText),
       ];
       if (showKindLabel) {
-        textElements.push(svg("text", { class: "node-kind", y: kindY }, isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind)));
+        textElements.push(
+          svg("rect", {
+            class: "node-kind-chip",
+            x: -kindChipWidth / 2,
+            y: kindY - 9,
+            width: kindChipWidth,
+            height: 18,
+            rx: 9,
+            ry: 9,
+          }),
+          svg("text", { class: "node-kind", y: kindY }, kindText),
+        );
       }
       group.append(...textElements);
       if (showCreateHandles) {

@@ -47,6 +47,7 @@ export type UiEventHandlers = {
   showMapView: () => void;
   showOutlineView: () => void;
   showWalkView: () => void;
+  togglePresentationMode: () => void;
   previousWalkThought: () => void;
   nextWalkThought: () => void;
   showWalkThoughtOnMap: () => void;
@@ -158,6 +159,7 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.mapViewButton.addEventListener("click", handlers.showMapView);
   els.outlineViewButton.addEventListener("click", handlers.showOutlineView);
   els.walkViewButton.addEventListener("click", handlers.showWalkView);
+  els.presentationButton.addEventListener("click", handlers.togglePresentationMode);
   els.walkPrevButton.addEventListener("click", handlers.previousWalkThought);
   els.walkNextButton.addEventListener("click", handlers.nextWalkThought);
   els.walkMapButton.addEventListener("click", handlers.showWalkThoughtOnMap);

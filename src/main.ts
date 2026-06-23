@@ -98,6 +98,14 @@ type CommandPaletteItem = {
   meta: string;
   action: () => void;
 };
+type PresentationSnapshot = {
+  stageView: StageViewId;
+  sidebarHidden: boolean;
+  detailsHidden: boolean;
+  mobileLibraryOpen: boolean;
+  mobileDetailsOpen: boolean;
+  mobileCaptureOpen: boolean;
+};
 type CalmDepthLayoutOptions = {
   verticalGap: number;
   sideGap: number;
@@ -150,6 +158,8 @@ let reviewMode: ReviewModeId = "unplaced";
 let noteWorkspaceOpen = false;
 let activeDetailsTab: DetailsTabId = "details";
 let stageView: StageViewId = "map";
+let presentationMode = false;
+let presentationSnapshot: PresentationSnapshot | null = null;
 let commandPaletteOpen = false;
 let commandPaletteMode: CommandPaletteMode = "root";
 let commandPaletteActiveIndex = 0;
@@ -214,6 +224,7 @@ const els: AppElements = {
   mapViewButton: qs("#mapViewButton"),
   outlineViewButton: qs("#outlineViewButton"),
   walkViewButton: qs("#walkViewButton"),
+  presentationButton: qs("#presentationButton"),
   outlineView: qs("#outlineView"),
   outlineTitle: qs("#outlineTitle"),
   outlineSummary: qs("#outlineSummary"),
@@ -508,6 +519,7 @@ function bindEvents() {
     showMapView: () => setStageView("map"),
     showOutlineView: () => setStageView("outline"),
     showWalkView: () => setStageView("walk"),
+    togglePresentationMode,
     previousWalkThought,
     nextWalkThought,
     showWalkThoughtOnMap,
@@ -658,6 +670,7 @@ function bindEvents() {
     onDocumentPointerUp,
     onDocumentPointerDown,
     onKeyDown: (event) => {
+      if (presentationMode && handlePresentationKeyDown(event)) return;
       if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "p" || event.key === "/")) {
         event.preventDefault();
         openCommandPalette();
@@ -699,6 +712,11 @@ function bindEvents() {
         closeMobileCapture();
       }
     },
+  });
+  document.addEventListener("fullscreenchange", () => {
+    if (presentationMode && !document.fullscreenElement) {
+      exitPresentationMode({ exitFullscreen: false });
+    }
   });
 }
 function setupResponsiveManagementSlots() {
@@ -1514,6 +1532,108 @@ function showWalkThoughtOnMap() {
   if (!state.selectedId) return;
   setStageView("map");
   centerSelected();
+}
+
+function togglePresentationMode() {
+  if (presentationMode) {
+    exitPresentationMode();
+  } else {
+    enterPresentationMode();
+  }
+}
+
+function enterPresentationMode() {
+  if (presentationMode) return;
+  presentationSnapshot = {
+    stageView,
+    sidebarHidden,
+    detailsHidden,
+    mobileLibraryOpen,
+    mobileDetailsOpen,
+    mobileCaptureOpen,
+  };
+  presentationMode = true;
+  sidebarHidden = true;
+  detailsHidden = true;
+  mobileLibraryOpen = false;
+  mobileDetailsOpen = false;
+  mobileCaptureOpen = false;
+  closeCommandPalette();
+  closeSnapshotPanel();
+  closeNoteWorkspace();
+  closeContextMenu();
+  closeSettings();
+  closeMoreMenu();
+  closeInboxReview();
+  closeMobilePanels();
+  closeMobileCapture();
+  setStageView("walk");
+  renderPanelState();
+  renderWalk();
+  requestAnimationFrame(() => {
+    measureGraph();
+    renderGraph();
+  });
+  document.documentElement.requestFullscreen?.().catch(() => undefined);
+}
+
+function exitPresentationMode(options: { exitFullscreen?: boolean } = {}) {
+  if (!presentationMode) return;
+  const snapshot = presentationSnapshot;
+  presentationMode = false;
+  presentationSnapshot = null;
+  if (snapshot) {
+    sidebarHidden = snapshot.sidebarHidden;
+    detailsHidden = snapshot.detailsHidden;
+    mobileLibraryOpen = snapshot.mobileLibraryOpen;
+    mobileDetailsOpen = snapshot.mobileDetailsOpen;
+    mobileCaptureOpen = snapshot.mobileCaptureOpen;
+    setStageView(snapshot.stageView);
+  }
+  renderPanelState();
+  refreshGraphAfterPanelChange();
+  if (options.exitFullscreen !== false && document.fullscreenElement) {
+    document.exitFullscreen?.().catch(() => undefined);
+  }
+}
+
+function handlePresentationKeyDown(event: KeyboardEvent): boolean {
+  if (isTextEditing(event.target)) return false;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    exitPresentationMode();
+    return true;
+  }
+  if (["ArrowRight", "PageDown", " "].includes(event.key)) {
+    event.preventDefault();
+    movePresentationThought(1);
+    return true;
+  }
+  if (["ArrowLeft", "PageUp"].includes(event.key)) {
+    event.preventDefault();
+    movePresentationThought(-1);
+    return true;
+  }
+  if (event.key.toLowerCase() === "m") {
+    event.preventDefault();
+    togglePresentationMapView();
+    return true;
+  }
+  return false;
+}
+
+function movePresentationThought(direction: number) {
+  if (stageView !== "walk") setStageView("walk");
+  moveWalkThought(direction);
+}
+
+function togglePresentationMapView() {
+  if (stageView === "walk") {
+    showWalkThoughtOnMap();
+    return;
+  }
+  setStageView("walk");
+  renderWalk();
 }
 
 function spanText(text: string) {
@@ -4024,6 +4144,7 @@ function renderPanelState() {
   const mobile = isMobileLayout();
   els.appShell.classList.toggle("sidebar-hidden", !mobile && sidebarHidden);
   els.appShell.classList.toggle("details-hidden", !mobile && detailsHidden);
+  els.appShell.classList.toggle("presentation-mode", presentationMode);
   els.appShell.classList.toggle("mobile-library-open", mobile && mobileLibraryOpen);
   els.appShell.classList.toggle("mobile-details-open", mobile && mobileDetailsOpen);
   els.mobileScrim.hidden = !(mobile && (mobileLibraryOpen || mobileDetailsOpen));
@@ -4049,6 +4170,10 @@ function renderPanelState() {
   els.sidebarToggleButton.setAttribute("aria-expanded", String(mobile ? mobileLibraryOpen : !sidebarHidden));
   els.detailsToggleButton.setAttribute("aria-label", els.detailsToggleButton.title);
   els.detailsToggleButton.setAttribute("aria-expanded", String(mobile ? mobileDetailsOpen : !detailsHidden));
+  els.presentationButton.textContent = presentationMode ? "Exit" : "Present";
+  els.presentationButton.title = presentationMode ? "Exit presentation mode" : "Start presentation mode";
+  els.presentationButton.setAttribute("aria-label", els.presentationButton.title);
+  els.presentationButton.setAttribute("aria-pressed", String(presentationMode));
   els.fitButton.setAttribute("aria-label", "Fit map");
   els.moreButton.setAttribute("aria-label", "More map tools");
   renderMobileCapture();

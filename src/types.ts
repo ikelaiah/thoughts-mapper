@@ -228,6 +228,7 @@ export type AppElements = {
   mapViewButton: HTMLButtonElement;
   outlineViewButton: HTMLButtonElement;
   walkViewButton: HTMLButtonElement;
+  presentationButton: HTMLButtonElement;
   outlineView: HTMLElement;
   outlineTitle: HTMLElement;
   outlineSummary: HTMLElement;

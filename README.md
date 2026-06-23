@@ -74,6 +74,7 @@ The visual graph keeps the selected thought central. Thoughts that frame it sit 
 - Use undo and redo for map edits
 - Pan, zoom, fit, center, and reset the graph view
 - Collapse the left library when you want more space
+- Present a guided full-screen walk through your map
 - Switch between multiple projects
 - Start from focused templates for project tracking, meetings, personal CRM, learning, software architecture, and helpdesk knowledge bases
 

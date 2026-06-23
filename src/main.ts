@@ -5,6 +5,7 @@ import {
   getNodeBox as calculateNodeBox,
   interpolate,
   interpolatePositions,
+  resolveThoughtOverlaps,
 } from "./graph-layout";
 import { createProject, sanitizeAppData, sanitizeState } from "./app-data";
 import { renderGraphView } from "./graph-render";
@@ -2648,6 +2649,12 @@ function computeFocusPositions(selectedId = state.selectedId) {
 
   if (!parents.length && !children.length && !siblings.length && !related.length) {
     positions.set(selected.id, { x: selected.x, y: selected.y });
+  }
+  if (!isCalmMode()) {
+    resolveThoughtOverlaps(positions, getGraphThoughts(), getNodeBox, {
+      gap: isMobileLayout() ? 24 : 30,
+      lockedIds: [selected.id],
+    });
   }
   return positions;
 }

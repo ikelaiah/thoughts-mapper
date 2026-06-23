@@ -7,6 +7,52 @@ type RenderItem = {
   priority: number;
 };
 
+export type LinkGroupPresentationOptions = {
+  useCalmDepthStyles: boolean;
+  isActiveLink: boolean;
+  isSelectedLink: boolean;
+  isPreviewLink: boolean;
+  isAppearing: boolean;
+  isLeaving: boolean;
+  isFocusLink: boolean;
+  hasSelectedThought: boolean;
+  depthOpacity?: number;
+};
+
+export function getLinkGroupPresentation(options: LinkGroupPresentationOptions): { className: string; opacity: number } {
+  const {
+    useCalmDepthStyles,
+    isActiveLink,
+    isSelectedLink,
+    isPreviewLink,
+    isAppearing,
+    isLeaving,
+    isFocusLink,
+    hasSelectedThought,
+    depthOpacity,
+  } = options;
+  const classes = ["link-group"];
+  if (isActiveLink) classes.push("active");
+  if (isSelectedLink) classes.push("selected");
+  if (useCalmDepthStyles && isPreviewLink) classes.push("preview");
+  if (isAppearing) classes.push("appearing");
+  if (isLeaving) classes.push("leaving");
+  if (useCalmDepthStyles && isFocusLink && !isActiveLink) classes.push("context");
+  if (useCalmDepthStyles && hasSelectedThought && !isFocusLink && !isSelectedLink && !isLeaving) classes.push("dimmed");
+
+  const canUseDepthOpacity =
+    useCalmDepthStyles &&
+    depthOpacity !== undefined &&
+    !isActiveLink &&
+    !isSelectedLink &&
+    !isPreviewLink &&
+    !isLeaving;
+  return {
+    className: classes.join(" "),
+    opacity: canUseDepthOpacity ? depthOpacity : 1,
+  };
+}
+
 export type GraphRenderContext = {
   state: ProjectState;
   els: Pick<AppElements, "viewport" | "linksLayer" | "nodesLayer">;
@@ -135,16 +181,22 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const endpoints = getTrimmedLinkEndpoints(fromPos, toPos, fromNodeBox, toNodeBox, state.settings);
       const thickness = state.settings.lineThickness + (isActiveLink || isPreviewLink || isSelectedLink ? 0.8 : 0);
       const linkDepthStyle = getLinkDepthStyle(link.from, link.to);
-      const linkOpacity = linkDepthStyle && !isActiveLink && !isSelectedLink && !isPreviewLink && !isLeaving ? linkDepthStyle.opacity : 1;
+      const linkPresentation = getLinkGroupPresentation({
+        useCalmDepthStyles,
+        isActiveLink,
+        isSelectedLink,
+        isPreviewLink,
+        isAppearing,
+        isLeaving,
+        isFocusLink,
+        hasSelectedThought: Boolean(state.selectedId),
+        depthOpacity: linkDepthStyle?.opacity,
+      });
       const groupAttrs: SvgAttrs = {
-        class: `link-group${isActiveLink ? " active" : ""}${isSelectedLink ? " selected" : ""}${isPreviewLink ? " preview" : ""}${isAppearing ? " appearing" : ""}${isLeaving ? " leaving" : ""}${
-          isFocusLink && !isActiveLink ? " context" : ""
-        }${
-          state.selectedId && !isFocusLink && !isSelectedLink && !isLeaving ? " dimmed" : ""
-        }`,
+        class: linkPresentation.className,
         "data-link-id": visualId,
       };
-      if (linkOpacity < 1) groupAttrs.style = `opacity: ${linkOpacity}`;
+      if (linkPresentation.opacity < 1) groupAttrs.style = `opacity: ${linkPresentation.opacity}`;
       const group = svg("g", groupAttrs);
       group.append(svg("title", {}, `${from.title} ${getLinkDirectionText(link)} ${to.title}`));
       const linkAttrs: SvgAttrs = {

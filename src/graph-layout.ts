@@ -1,5 +1,11 @@
 import type { ColumnOptions, LinkRelation, MapSettings, NodeBox, Point, PositionMap, RowOptions, Thought } from "./types";
 
+export type OverlapResolutionOptions = {
+  gap?: number;
+  lockedIds?: Iterable<string>;
+  maxIterations?: number;
+};
+
 export function getCurvePath(from: Point, to: Point): string {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -225,6 +231,102 @@ export function arrangeVerticalThoughtColumn(
     positions.set(thought.id, { x, y: cursor + box.height / 2 });
     cursor += box.height + gap;
   });
+}
+
+export function resolveThoughtOverlaps(
+  positions: PositionMap,
+  thoughts: Thought[],
+  getThoughtNodeBox: (id: string) => NodeBox,
+  options: OverlapResolutionOptions = {},
+): void {
+  if (thoughts.length < 2) return;
+
+  const gap = Math.max(0, options.gap ?? 24);
+  const maxIterations = Math.max(1, options.maxIterations ?? 120);
+  const lockedIds = new Set(options.lockedIds || []);
+  const ordered = [...new Map(thoughts.map((thought) => [thought.id, thought])).values()]
+    .filter((thought) => positions.has(thought.id))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const boxes = new Map(ordered.map((thought) => [thought.id, getThoughtNodeBox(thought.id)]));
+  const epsilon = 0.01;
+
+  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
+    let collisionCount = 0;
+
+    for (let firstIndex = 0; firstIndex < ordered.length - 1; firstIndex += 1) {
+      const first = ordered[firstIndex];
+      const firstBox = boxes.get(first.id);
+      if (!firstBox) continue;
+
+      for (let secondIndex = firstIndex + 1; secondIndex < ordered.length; secondIndex += 1) {
+        const second = ordered[secondIndex];
+        const secondBox = boxes.get(second.id);
+        const firstPosition = positions.get(first.id);
+        const secondPosition = positions.get(second.id);
+        if (!secondBox || !firstPosition || !secondPosition) continue;
+
+        const deltaX = secondPosition.x - firstPosition.x;
+        const deltaY = secondPosition.y - firstPosition.y;
+        const overlapX = (firstBox.width + secondBox.width) / 2 + gap - Math.abs(deltaX);
+        const overlapY = (firstBox.height + secondBox.height) / 2 + gap - Math.abs(deltaY);
+        if (overlapX <= epsilon || overlapY <= epsilon) continue;
+        if (lockedIds.has(first.id) && lockedIds.has(second.id)) continue;
+
+        collisionCount += 1;
+        if (overlapX <= overlapY) {
+          separateOverlappingPair(
+            firstPosition,
+            secondPosition,
+            "x",
+            overlapX + epsilon,
+            getSeparationDirection(deltaX, first.id, second.id),
+            lockedIds.has(first.id),
+            lockedIds.has(second.id),
+          );
+        } else {
+          separateOverlappingPair(
+            firstPosition,
+            secondPosition,
+            "y",
+            overlapY + epsilon,
+            getSeparationDirection(deltaY, first.id, second.id),
+            lockedIds.has(first.id),
+            lockedIds.has(second.id),
+          );
+        }
+      }
+    }
+
+    if (!collisionCount) break;
+  }
+}
+
+function separateOverlappingPair(
+  first: Point,
+  second: Point,
+  axis: "x" | "y",
+  distance: number,
+  direction: number,
+  firstLocked: boolean,
+  secondLocked: boolean,
+): void {
+  if (firstLocked) {
+    second[axis] += distance * direction;
+    return;
+  }
+  if (secondLocked) {
+    first[axis] -= distance * direction;
+    return;
+  }
+
+  const halfDistance = distance / 2;
+  first[axis] -= halfDistance * direction;
+  second[axis] += halfDistance * direction;
+}
+
+function getSeparationDirection(delta: number, firstId: string, secondId: string): number {
+  if (Math.abs(delta) > 0.001) return delta > 0 ? 1 : -1;
+  return firstId.localeCompare(secondId) <= 0 ? 1 : -1;
 }
 
 export function interpolate(from: number, to: number, progress: number): number {

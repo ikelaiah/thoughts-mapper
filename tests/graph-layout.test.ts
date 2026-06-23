@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getNodeBox, getTrimmedLinkEndpoints, resolveThoughtOverlaps } from "../src/graph-layout";
+import { calculateFitView, getNodeBox, getTrimmedLinkEndpoints, resolveThoughtOverlaps } from "../src/graph-layout";
 import type { NodeBox, PositionMap, Thought } from "../src/types";
 
 const box: NodeBox = {
@@ -52,6 +52,57 @@ describe("getNodeBox", () => {
     expect(distant).toMatchObject({ scale: 1, baseHeight: 62 });
     expect(selected.width).toBe(connected.width);
     expect(connected.width).toBe(distant.width);
+  });
+});
+
+describe("calculateFitView", () => {
+  const makeThought = (id: string, x: number, y: number): Thought => ({
+    id,
+    title: id,
+    kind: "thought",
+    note: "",
+    tags: [],
+    attachments: [],
+    x,
+    y,
+  });
+
+  it("fits the target visual positions instead of stale stored coordinates", () => {
+    const thoughts = [
+      makeThought("a", -1000, -1000),
+      makeThought("b", -900, -1000),
+    ];
+    const positions: PositionMap = new Map([
+      ["a", { x: 100, y: 0 }],
+      ["b", { x: 300, y: 0 }],
+    ]);
+
+    const view = calculateFitView(thoughts, positions, () => box, { width: 1000, height: 600 }, { padding: 100 });
+
+    expect(view?.scale).toBe(1.7);
+    expect(view?.x).toBe(-340);
+    expect(view?.y).toBeCloseTo(0);
+  });
+
+  it("centers the rendered node edges, including asymmetric node widths", () => {
+    const thoughts = [
+      makeThought("a", 0, 0),
+      makeThought("b", 300, 0),
+    ];
+    const positions: PositionMap = new Map(thoughts.map((thought) => [thought.id, { x: thought.x, y: thought.y }]));
+    const wideBox = { ...box, baseWidth: 240, hitBaseWidth: 240, width: 240 };
+
+    const view = calculateFitView(
+      thoughts,
+      positions,
+      (id) => id === "b" ? wideBox : box,
+      { width: 1000, height: 500 },
+      { padding: 100 },
+    );
+
+    expect(view?.scale).toBeCloseTo(1000 / 680);
+    expect(view?.x).toBeCloseTo(-180 * (1000 / 680));
+    expect(view?.y).toBeCloseTo(0);
   });
 });
 

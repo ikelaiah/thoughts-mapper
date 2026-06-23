@@ -1,10 +1,55 @@
-import type { ColumnOptions, LinkRelation, MapSettings, NodeBox, Point, PositionMap, RowOptions, Thought } from "./types";
+import type { ColumnOptions, LinkRelation, MapSettings, NodeBox, Point, PositionMap, RowOptions, Thought, ViewState } from "./types";
 
 export type OverlapResolutionOptions = {
   gap?: number;
   lockedIds?: Iterable<string>;
   maxIterations?: number;
 };
+
+export type FitViewOptions = {
+  padding?: number;
+  minScale?: number;
+  maxScale?: number;
+};
+
+export function calculateFitView(
+  thoughts: Thought[],
+  positions: PositionMap,
+  getThoughtNodeBox: (id: string) => NodeBox,
+  graphRect: { width: number; height: number },
+  options: FitViewOptions = {},
+): ViewState | null {
+  if (!thoughts.length) return null;
+
+  const padding = options.padding ?? 115;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  thoughts.forEach((thought) => {
+    const position = positions.get(thought.id) || thought;
+    const box = getThoughtNodeBox(thought.id);
+    minX = Math.min(minX, position.x - box.width / 2);
+    maxX = Math.max(maxX, position.x + box.width / 2);
+    minY = Math.min(minY, position.y - box.height / 2);
+    maxY = Math.max(maxY, position.y + box.height / 2);
+  });
+
+  const width = maxX - minX + padding * 2;
+  const height = maxY - minY + padding * 2;
+  const scale = clamp(
+    Math.min(graphRect.width / width, graphRect.height / height),
+    options.minScale ?? 0.5,
+    options.maxScale ?? 1.7,
+  );
+
+  return {
+    scale,
+    x: -((minX + maxX) / 2) * scale,
+    y: -((minY + maxY) / 2) * scale,
+  };
+}
 
 export function getCurvePath(from: Point, to: Point): string {
   const dx = to.x - from.x;

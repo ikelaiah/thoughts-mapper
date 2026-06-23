@@ -1,6 +1,7 @@
 import {
   arrangeHorizontalThoughtRow,
   arrangeVerticalThoughtColumn,
+  calculateFitView,
   easeOutCubic,
   getNodeBox as calculateNodeBox,
   interpolate,
@@ -3708,34 +3709,20 @@ function isTextEditing(target) {
 }
 
 function fitToGraph() {
-  const toView = getFitView();
+  const toPositions = computeFocusPositions(state.selectedId);
+  const toView = getFitView(toPositions);
   if (!toView) return;
   animateCamera({
     fromPositions: getVisualPositions(),
-    toPositions: computeFocusPositions(state.selectedId),
+    toPositions,
     toView,
     save: true,
   });
 }
 
-function getFitView() {
+function getFitView(positions = getVisualPositions()) {
   const graphThoughts = getGraphThoughts();
-  if (!graphThoughts.length) return null;
-  const padding = 115;
-  const xs = graphThoughts.map((thought) => thought.x);
-  const ys = graphThoughts.map((thought) => thought.y);
-  const minX = Math.min(...xs) - padding;
-  const maxX = Math.max(...xs) + padding;
-  const minY = Math.min(...ys) - padding;
-  const maxY = Math.max(...ys) + padding;
-  const width = maxX - minX;
-  const height = maxY - minY;
-  const scale = clamp(Math.min(graphRect.width / width, graphRect.height / height), 0.5, 1.7);
-  return {
-    scale,
-    x: -((minX + maxX) / 2) * scale,
-    y: -((minY + maxY) / 2) * scale,
-  };
+  return calculateFitView(graphThoughts, positions, getNodeBox, graphRect);
 }
 
 function resetView() {

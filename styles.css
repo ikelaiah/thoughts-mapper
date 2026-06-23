@@ -855,6 +855,25 @@ body[data-theme="dark"][data-background="eink"] .map-stage {
   color: var(--ink);
 }
 
+.zoom-factor {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-strong) 68%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 760;
+}
+
+.zoom-factor[hidden] {
+  display: none;
+}
+
 .toolbar-icon {
   width: 18px;
   height: 18px;
@@ -3853,6 +3872,11 @@ input[type="range"] {
     padding: 0;
     font-size: 18px;
     line-height: 1;
+  }
+
+  .zoom-factor {
+    min-width: 48px;
+    min-height: 38px;
   }
 
   .stage-view-switch {

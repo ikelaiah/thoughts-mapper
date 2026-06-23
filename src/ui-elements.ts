@@ -57,6 +57,7 @@ export function collectAppElements(root: ParentNode = document): AppElements {
     undoButton: required("#undoButton"),
     redoButton: required("#redoButton"),
     fitButton: required("#fitButton"),
+    zoomFactor: required("#zoomFactor"),
     centerButton: required("#centerButton"),
     resetButton: required("#resetButton"),
     settingsButton: required("#settingsButton"),

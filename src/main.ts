@@ -1142,6 +1142,7 @@ function renderStageView() {
   els.fitButton.disabled = nonMapActive;
   els.fitButton.title = nonMapActive ? "Switch to map view to fit the map" : "Fit map";
   els.fitButton.setAttribute("aria-label", els.fitButton.title);
+  els.zoomFactor.hidden = nonMapActive;
   els.stagePrompt.hidden = nonMapActive || Boolean(getSelectedThought());
 }
 
@@ -2002,6 +2003,12 @@ function renderKindSettings() {
 }
 
 function renderGraph() {
+  const zoomPercent = Math.round(state.view.scale * 100);
+  const zoomLabel = `Zoom ${zoomPercent}%`;
+  els.zoomFactor.value = `${zoomPercent}%`;
+  els.zoomFactor.setAttribute("aria-label", zoomLabel);
+  els.zoomFactor.title = zoomLabel;
+
   renderGraphView({
     state,
     els,

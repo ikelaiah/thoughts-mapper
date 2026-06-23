@@ -219,6 +219,7 @@ export type AppElements = {
   undoButton: HTMLButtonElement;
   redoButton: HTMLButtonElement;
   fitButton: HTMLButtonElement;
+  zoomFactor: HTMLOutputElement;
   centerButton: HTMLButtonElement;
   resetButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;

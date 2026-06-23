@@ -174,7 +174,7 @@ export function sanitizeState(nextState: unknown): ProjectState {
     background: backgroundIds.includes(stringOrEmpty(sourceSettings.background))
       ? stringOrEmpty(sourceSettings.background)
       : "calm",
-    calmMode: true,
+    calmMode: typeof sourceSettings.calmMode === "boolean" ? sourceSettings.calmMode : true,
     lineThickness: clamp(Number(sourceSettings.lineThickness) || 1.5, 1, 8),
     connectionType: ["straight", "curve"].includes(stringOrEmpty(sourceSettings.connectionType))
       ? stringOrEmpty(sourceSettings.connectionType) as MapSettings["connectionType"]

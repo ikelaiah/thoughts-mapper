@@ -33,11 +33,20 @@ describe("sanitizeState", () => {
     expect(state.settings).toMatchObject({
       theme: "light",
       background: "calm",
-      calmMode: true,
+      calmMode: false,
       lineThickness: 8,
       connectionType: "curve",
       lineEndpoint: "floating",
     });
+  });
+
+  it("defaults calm mode on when the setting is missing", () => {
+    const state = sanitizeState({
+      thoughts: [{ id: "a", title: "Alpha" }],
+      settings: {},
+    });
+
+    expect(state.settings.calmMode).toBe(true);
   });
 
   it("preserves e-ink theme settings", () => {

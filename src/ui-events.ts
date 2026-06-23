@@ -40,6 +40,7 @@ export type UiEventHandlers = {
   openSettingsAndCloseMoreMenu: () => void;
   closeSettings: () => void;
   onColourSchemeChange: () => void;
+  onCalmModeChange: () => void;
   onLineThicknessInput: () => void;
   onConnectionTypeChange: () => void;
   onLineEndpointChange: () => void;
@@ -152,6 +153,7 @@ export function bindUiEvents(els: AppElements, handlers: UiEventHandlers): void 
   els.settingsMenuButton.addEventListener("click", handlers.openSettingsAndCloseMoreMenu);
   els.settingsCloseButton.addEventListener("click", handlers.closeSettings);
   els.colourSchemeInput.addEventListener("change", handlers.onColourSchemeChange);
+  els.calmModeInput.addEventListener("change", handlers.onCalmModeChange);
   els.lineThicknessInput.addEventListener("input", handlers.onLineThicknessInput);
   els.connectionTypeInput.addEventListener("change", handlers.onConnectionTypeChange);
   els.lineEndpointInput.addEventListener("change", handlers.onLineEndpointChange);

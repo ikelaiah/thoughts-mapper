@@ -23,6 +23,7 @@ export function getNodeBox({
   selectedId,
   thought,
   isConnected,
+  depthEffects,
   mobile,
   isInboxThought,
   getKindName,
@@ -31,20 +32,30 @@ export function getNodeBox({
   selectedId: string | null;
   thought: Thought | undefined;
   isConnected: boolean;
+  depthEffects: boolean;
   mobile: boolean;
   isInboxThought: (id: string) => boolean;
   getKindName: (id: string) => string;
 }): NodeBox {
-  const isActive = id === selectedId;
-  const scale = mobile ? (isActive ? 1.04 : isConnected ? 0.94 : 0.86) : isActive ? 1.08 : isConnected ? 0.98 : 0.88;
+  const isActive = depthEffects && id === selectedId;
+  const isNear = depthEffects && isConnected;
+  const scale = depthEffects
+    ? mobile ? (isActive ? 1.04 : isNear ? 0.94 : 0.86) : isActive ? 1.08 : isNear ? 0.98 : 0.88
+    : 1;
   const baseWidth = getContentNodeWidth(thought, {
-    min: mobile ? (isActive ? 146 : isConnected ? 126 : 114) : isActive ? 164 : isConnected ? 142 : 124,
-    max: mobile ? (isActive ? 210 : isConnected ? 184 : 160) : isActive ? 228 : isConnected ? 210 : 184,
-    titleLimit: isActive ? 24 : isConnected ? 18 : 15,
+    min: depthEffects
+      ? mobile ? (isActive ? 146 : isNear ? 126 : 114) : isActive ? 164 : isNear ? 142 : 124
+      : mobile ? 126 : 142,
+    max: depthEffects
+      ? mobile ? (isActive ? 210 : isNear ? 184 : 160) : isActive ? 228 : isNear ? 210 : 184
+      : mobile ? 184 : 210,
+    titleLimit: depthEffects ? isActive ? 24 : isNear ? 18 : 15 : 18,
     isInboxThought,
     getKindName,
   });
-  const baseHeight = mobile ? (isActive ? 62 : isConnected ? 58 : 54) : isActive ? 66 : isConnected ? 62 : 58;
+  const baseHeight = depthEffects
+    ? mobile ? (isActive ? 62 : isNear ? 58 : 54) : isActive ? 66 : isNear ? 62 : 58
+    : mobile ? 58 : 62;
   const hitBaseWidth = mobile ? Math.max(baseWidth + 28, 72 / scale) : baseWidth;
   const hitBaseHeight = mobile ? Math.max(baseHeight + 22, 56 / scale) : baseHeight;
   return {

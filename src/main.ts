@@ -263,6 +263,7 @@ const els: AppElements = {
   settingsCloseButton: qs("#settingsCloseButton"),
   mobileManagement: qs("#mobileManagement"),
   colourSchemeInput: qs("#colourSchemeInput"),
+  calmModeInput: qs("#calmModeInput"),
   lineThicknessInput: qs("#lineThicknessInput"),
   lineThicknessValue: qs("#lineThicknessValue"),
   connectionTypeInput: qs("#connectionTypeInput"),
@@ -510,6 +511,14 @@ function bindEvents() {
       state.settings.theme = scheme.theme;
       state.settings.background = scheme.background;
       applySettings();
+      persistState();
+    },
+    onCalmModeChange: () => {
+      pushHistory();
+      state.settings.calmMode = els.calmModeInput.checked;
+      focusPositions = computeFocusPositions(state.selectedId);
+      applySettings();
+      renderGraph();
       persistState();
     },
     onLineThicknessInput: () => {
@@ -917,6 +926,7 @@ function applySettings() {
   document.body.dataset.theme = state.settings.theme;
   document.body.dataset.background = state.settings.background;
   els.colourSchemeInput.value = getColourSchemeId(state.settings.theme, state.settings.background);
+  els.calmModeInput.checked = state.settings.calmMode;
   els.lineThicknessInput.value = String(state.settings.lineThickness);
   els.lineThicknessValue.value = state.settings.lineThickness.toFixed(1);
   els.lineThicknessValue.textContent = `${state.settings.lineThickness.toFixed(1)} px`;
@@ -2187,6 +2197,7 @@ function getNodeBox(id) {
     selectedId: state.selectedId,
     thought: getThought(id),
     isConnected: Boolean(state.selectedId && getConnectedThoughts(state.selectedId).some((thought) => thought.id === id)),
+    depthEffects: isCalmMode(),
     mobile: isMobileLayout(),
     isInboxThought,
     getKindName,
@@ -2932,7 +2943,7 @@ function uniqueThoughts(thoughts) {
 }
 
 function isCalmMode() {
-  return true;
+  return state.settings.calmMode;
 }
 
 function getConnections(id) {

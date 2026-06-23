@@ -76,6 +76,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
   const visibleFocusIds = new Set(getFocusFamilyIds(graphFocusId));
   const calmDepthStyles = getCalmDepthStyles(graphFocusId);
   const useCalmDepthStyles = Boolean(isCalmMode() && graphFocusId);
+  const useNodeDepthEffects = useCalmDepthStyles;
   const getNodeDepthStyle = (id: string): GraphDepthStyle | null => calmDepthStyles.get(id) || null;
   const shouldHideThought = (id: string): boolean => {
     if (!useCalmDepthStyles) return false;
@@ -243,13 +244,15 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const position = thoughtEffect?.position || positions.get(thought.id) || thought;
       const isActive = thought.id === graphFocusId;
       const isConnected = directFocusIds.has(thought.id) && !isActive;
-      const isSecondaryFocus = secondaryFocusIds.has(thought.id);
-      const isDimmed = Boolean(graphFocusId && (!directFocusIds.has(thought.id) || isSecondaryFocus));
+      const isSecondaryFocus = useNodeDepthEffects && secondaryFocusIds.has(thought.id);
+      const isDimmed = Boolean(useNodeDepthEffects && graphFocusId && (!directFocusIds.has(thought.id) || isSecondaryFocus));
       const isPreview = thought.id === previewId;
       const isPreviewRelated = previewIds.has(thought.id) && !isPreview;
       const isDeleting = thoughtEffect?.mode === "deleting";
       const isSoftDisconnected = graphEffects.dimThoughts.has(thought.id) && !isDeleting;
-      const depthClass = isActive
+      const depthClass = !useNodeDepthEffects
+        ? ""
+        : isActive
         ? " focus-node"
         : isConnected || isPreview
           ? " near-node"
@@ -269,7 +272,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
       const titleY = isMobileLayout() && showKindLabel ? -6 : showKindLabel ? -3 : 5;
       const kindY = isMobileLayout() ? 15 : 17;
       const nodeRadius = isActive ? 15 : 16;
-      const titleLimit = isActive ? 24 : isConnected || isPreview || isPreviewRelated ? 18 : 15;
+      const titleLimit = useNodeDepthEffects ? isActive ? 24 : isConnected || isPreview || isPreviewRelated ? 18 : 15 : 18;
       const titleText = trimLabel(thought.title, titleLimit);
       const kindText = isInboxThought(thought.id) ? "inbox" : getKindName(thought.kind);
       const kindChipWidth = Math.max(42, Math.min(nodeWidth - 32, kindText.length * 6.4 + 18));
@@ -281,7 +284,7 @@ export function renderGraphView(ctx: GraphRenderContext): void {
         ? 1
         : isSoftDisconnected
           ? 0.3
-          : depthStyle && !isPreview && !isPreviewRelated
+          : useNodeDepthEffects && depthStyle && !isPreview && !isPreviewRelated
             ? depthStyle.opacity
             : isDimmed && !isPreview && !isPreviewRelated
               ? 0.36

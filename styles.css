@@ -3566,6 +3566,67 @@ body[data-theme="dark"] .link-inline-row button {
   grid-column: 1;
 }
 
+.setting-toggle {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--panel-strong) 72%, transparent);
+  cursor: pointer;
+}
+
+.setting-toggle strong {
+  font-size: 13px;
+}
+
+.setting-toggle input {
+  position: relative;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  appearance: none;
+  background: color-mix(in srgb, var(--muted) 16%, var(--panel-strong));
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.setting-toggle input::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--panel-strong);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.22);
+  transition: transform 150ms ease;
+}
+
+.setting-toggle input:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.setting-toggle input:checked::after {
+  transform: translateX(18px);
+}
+
+.setting-toggle input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  outline-offset: 2px;
+}
+
 .settings-section {
   display: grid;
   grid-column: 1 / -1;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getTrimmedLinkEndpoints } from "../src/graph-layout";
+import { getNodeBox, getTrimmedLinkEndpoints } from "../src/graph-layout";
 import type { NodeBox } from "../src/types";
 
 const box: NodeBox = {
@@ -27,5 +27,30 @@ describe("getTrimmedLinkEndpoints", () => {
     expect(endpoints.from.x - box.width / 2).toBeLessThan(16);
     expect(260 - box.width / 2 - endpoints.to.x).toBeGreaterThan(10);
     expect(260 - box.width / 2 - endpoints.to.x).toBeLessThan(16);
+  });
+});
+
+describe("getNodeBox", () => {
+  it("uses one size tier when depth effects are disabled", () => {
+    const getBox = (id: string, isConnected: boolean) => getNodeBox({
+      id,
+      selectedId: "selected",
+      thought: { id, title: "Same title", kind: "thought", note: "", tags: [], attachments: [], x: 0, y: 0 },
+      isConnected,
+      depthEffects: false,
+      mobile: false,
+      isInboxThought: () => false,
+      getKindName: () => "Thought",
+    });
+
+    const selected = getBox("selected", false);
+    const connected = getBox("connected", true);
+    const distant = getBox("distant", false);
+
+    expect(selected).toMatchObject({ scale: 1, baseHeight: 62 });
+    expect(connected).toMatchObject({ scale: 1, baseHeight: 62 });
+    expect(distant).toMatchObject({ scale: 1, baseHeight: 62 });
+    expect(selected.width).toBe(connected.width);
+    expect(connected.width).toBe(distant.width);
   });
 });

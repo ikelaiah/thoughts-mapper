@@ -246,6 +246,7 @@ export type AppElements = {
   settingsCloseButton: HTMLButtonElement;
   mobileManagement: HTMLElement;
   colourSchemeInput: HTMLSelectElement;
+  calmModeInput: HTMLInputElement;
   lineThicknessInput: HTMLInputElement;
   lineThicknessValue: HTMLOutputElement;
   connectionTypeInput: HTMLSelectElement;
